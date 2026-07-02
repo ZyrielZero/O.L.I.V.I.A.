@@ -10,7 +10,7 @@ Performance Optimizations:
 import re
 import shutil
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -108,6 +108,30 @@ class SmartMemoryDB:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         short_uuid = uuid.uuid4().hex[:8]
         return f"{prefix}_{ts}_{short_uuid}"
+
+    @staticmethod
+    def _get_newest_docs(collection, n: int) -> List[str]:
+        """Return the n newest documents by metadata timestamp, newest first.
+
+        Fetches only ids+metadatas for the sort, then retrieves just the n
+        documents needed — never the whole document set.
+        """
+        meta_res = collection.get(include=["metadatas"])
+        ids = (meta_res.get("ids") if meta_res else None) or []
+        metas = (meta_res.get("metadatas") if meta_res else None) or []
+        if not ids:
+            return []
+
+        stamped = sorted(
+            zip(ids, metas),
+            key=lambda x: (x[1] or {}).get("timestamp", ""),
+            reverse=True,
+        )
+        top_ids = [doc_id for doc_id, _ in stamped[:n]]
+
+        doc_res = collection.get(ids=top_ids, include=["documents"])
+        by_id = dict(zip(doc_res.get("ids") or [], doc_res.get("documents") or []))
+        return [str(by_id[doc_id]) for doc_id in top_ids if by_id.get(doc_id) is not None]
 
     # =========================================================================
     # TIER 1: FACTS
@@ -276,30 +300,15 @@ class SmartMemoryDB:
                         self.add_fact(fact, category)
 
     def get_recent_conversations(self, n: int = 10) -> List[str]:
-        """Get the N most recent conversations."""
-        total = self.conversations.count()
-        if total == 0:
+        """Get the N most recent conversations, newest first."""
+        if self.conversations.count() == 0:
             return []
 
         try:
-            results = self.conversations.get()
-            if results:
-                docs = results.get("documents")
-                metas = results.get("metadatas")
-                if docs and metas:
-                    # Sort by timestamp descending, return most recent n
-                    paired = list(zip(docs, metas))
-                    paired.sort(
-                        key=lambda x: x[1].get("timestamp", "") if x[1] else "",
-                        reverse=True,
-                    )
-                    return [str(d) for d, _ in paired[:n] if d is not None]
-                elif docs:
-                    return [str(d) for d in docs if d is not None]
-        except Exception:
-            pass
-
-        return []
+            return self._get_newest_docs(self.conversations, n)
+        except Exception as e:
+            self.log.error(f"get_recent_conversations failed: {e}")
+            return []
 
     def search_conversations(self, query: str, n_results: int = 3) -> str:
         """Search conversations for relevant context."""
@@ -336,29 +345,19 @@ class SmartMemoryDB:
         )
 
     def get_summaries(self, n: int = 5) -> List[str]:
-        """Get recent summaries."""
-        total = self.summaries.count()
-        if total == 0:
+        """Get the N most recent summaries, newest first.
+
+        Note: a plain `.get(limit=n)` would fetch an arbitrary first-n and
+        only then sort — returning the oldest summaries, not the newest.
+        """
+        if self.summaries.count() == 0:
             return []
 
         try:
-            results = self.summaries.get(limit=n)
-            if results:
-                docs = results.get("documents")
-                metas = results.get("metadatas")
-                if docs and metas:
-                    paired = list(zip(docs, metas))
-                    paired.sort(
-                        key=lambda x: x[1].get("timestamp", "") if x[1] else "",
-                        reverse=True,
-                    )
-                    return [str(d) for d, _ in paired[:n] if d is not None]
-                elif docs:
-                    return [str(d) for d in docs if d is not None]
-        except Exception:
-            pass
-
-        return []
+            return self._get_newest_docs(self.summaries, n)
+        except Exception as e:
+            self.log.error(f"get_summaries failed: {e}")
+            return []
 
     # =========================================================================
     # STARTUP CONTEXT
@@ -402,12 +401,11 @@ class SmartMemoryDB:
     def search_all(self, query: str, n_results: int = 3) -> str:
         """Search across all tiers for relevant information.
 
-        OPTIMIZED: Parallel tier searches using ThreadPoolExecutor.
-        O(3n) sequential -> O(n) parallel (where n = query time)
+        Tiers are queried in parallel, then merged in a deliberate priority
+        order (facts > summaries > conversations) before truncating — completion
+        order must not decide which tier's results survive the cut.
         """
-        results_list: List[str] = []
 
-        # Define search tasks for parallel execution
         def search_facts():
             if self.facts.count() > 0:
                 fact_results = self.facts.query(query_texts=[query], n_results=2)
@@ -435,25 +433,27 @@ class SmartMemoryDB:
                         return [str(d) for d in docs[0] if d is not None]
             return []
 
-        # Execute all searches in parallel
-        # O(3 * query_time) sequential -> O(query_time) parallel
-        futures = [
-            self._executor.submit(search_facts),
-            self._executor.submit(search_conversations),
-            self._executor.submit(search_summaries),
-        ]
+        # Execute all searches in parallel, then collect in priority order
+        futures = {
+            "facts": self._executor.submit(search_facts),
+            "summaries": self._executor.submit(search_summaries),
+            "conversations": self._executor.submit(search_conversations),
+        }
 
-        for future in as_completed(futures):
+        tier_results: Dict[str, List[str]] = {}
+        for tier, future in futures.items():
             try:
-                tier_results = future.result(timeout=5.0)
-                results_list.extend(tier_results)
+                tier_results[tier] = future.result(timeout=5.0)
             except Exception:
-                pass
+                tier_results[tier] = []
 
-        if not results_list:
+        merged = (
+            tier_results["facts"] + tier_results["summaries"] + tier_results["conversations"]
+        )
+        if not merged:
             return ""
 
-        return "\n---\n".join(results_list[:n_results])
+        return "\n---\n".join(merged[:n_results])
 
     # =========================================================================
     # MAINTENANCE
