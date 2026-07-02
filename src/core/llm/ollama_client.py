@@ -92,27 +92,31 @@ class ConversationManager:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Dict:
-        self.history.append({"role": "user", "content": user_input})
-        # Optimization: Build message list directly instead of .copy()
-        # list() shallow copy is slightly faster than .copy() method call
-        # and we construct with context injection inline when needed
-        n_tok = max_tokens if max_tokens else (250 if context else GEN_PARAMS["num_predict"])
+        # History is NOT mutated here: the user turn is only committed (together
+        # with the assistant turn) after a successful stream, so a failed request
+        # can't leave an orphaned user message behind.
+        user_msg = {"role": "user", "content": user_input}
+        n_tok = (
+            max_tokens if max_tokens is not None else (250 if context else GEN_PARAMS["num_predict"])
+        )
 
         if context:
-            # Build list with context message inserted before the last (user) message
-            msgs = self.history[:-1] + [
+            # Context message inserted just before the new user message
+            msgs = self.history + [
                 {"role": "system", "content": f"[Background: {context}] Reply briefly."},
-                self.history[-1],
+                user_msg,
             ]
         else:
-            msgs = list(self.history)
+            msgs = self.history + [user_msg]
 
         return {
             "model": self.model,
             "messages": msgs,
             "stream": True,
             "options": {
-                "temperature": temperature if temperature else GEN_PARAMS["temperature"],
+                "temperature": (
+                    temperature if temperature is not None else GEN_PARAMS["temperature"]
+                ),
                 "top_p": GEN_PARAMS["top_p"],
                 "top_k": GEN_PARAMS["top_k"],
                 "repeat_penalty": GEN_PARAMS["repeat_penalty"],
@@ -154,7 +158,10 @@ class ConversationManager:
                     except json.JSONDecodeError:
                         continue
 
+            # Commit user + assistant turns together only after a successful
+            # stream — a ConnectError/timeout leaves history untouched
             if resp_chunks:
+                self.history.append({"role": "user", "content": user_input})
                 self.history.append({"role": "assistant", "content": "".join(resp_chunks)})
                 self.trim_history()
 

@@ -28,11 +28,11 @@ def test_conversation_manager_history_management():
     assert len(manager.history) == 1
     assert manager.history[0]["role"] == "system"
 
-    # Add messages to history by building payload
+    # Simulate 25 committed turns (history is only written after a
+    # successful stream, never by _build_payload)
     for i in range(25):
-        manager._build_payload(f"Message {i}")
+        manager.history.append({"role": "user", "content": f"Message {i}"})
 
-    # History should have system + 25 user messages
     assert len(manager.history) == 26
 
     # Trim to last 20
@@ -124,9 +124,9 @@ def test_conversation_manager_clear_history():
     """Clear history resets to just system prompt."""
     manager = ConversationManager(model="test-model", system_prompt="Test prompt")
 
-    # Add some history
-    manager._build_payload("Message 1")
-    manager._build_payload("Message 2")
+    # Add some committed history
+    manager.history.append({"role": "user", "content": "Message 1"})
+    manager.history.append({"role": "assistant", "content": "Reply 1"})
 
     assert len(manager.history) > 1
 
@@ -193,6 +193,110 @@ async def test_check_ollama_connection_async_failure():
 
         result = await check_ollama_connection_async("http://localhost:11434")
         assert result is False
+
+
+# ===== History Desync (Phase 0.5) =====
+
+
+class _FakeStreamResponse:
+    """Minimal stand-in for httpx's streaming response."""
+
+    def __init__(self, lines):
+        self._lines = lines
+
+    def raise_for_status(self):
+        pass
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+class _FakeStreamCM:
+    """Async context manager mimicking httpx.AsyncClient.stream()."""
+
+    def __init__(self, lines):
+        self._resp = _FakeStreamResponse(lines)
+
+    async def __aenter__(self):
+        return self._resp
+
+    async def __aexit__(self, *args):
+        return False
+
+
+@pytest.mark.unit
+def test_build_payload_does_not_mutate_history():
+    """Building a payload must not commit the user turn to history."""
+    manager = ConversationManager(model="test-model", system_prompt="Test prompt")
+
+    payload = manager._build_payload("Hello there")
+
+    assert len(manager.history) == 1  # system prompt only
+    # ...but the payload still carries the new user message
+    assert payload["messages"][-1] == {"role": "user", "content": "Hello there"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_history_unchanged_when_request_fails():
+    """A failed request must not leave an orphaned user turn in history."""
+    manager = ConversationManager(model="test-model", system_prompt="Test prompt")
+    manager._client = MagicMock()
+    manager._client.stream = MagicMock(side_effect=httpx.ConnectError("refused"))
+
+    from src.core.llm.ollama_client import OllamaConnectionError
+
+    with pytest.raises(OllamaConnectionError):
+        async for _ in manager.chat_stream_async("Hello?"):
+            pass
+
+    assert manager.history == [{"role": "system", "content": "Test prompt"}]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_history_commits_both_turns_after_successful_stream():
+    """User and assistant turns are committed together after success."""
+    import json as _json
+
+    manager = ConversationManager(model="test-model", system_prompt="Test prompt")
+    lines = [
+        _json.dumps({"message": {"content": "Hi"}}),
+        _json.dumps({"message": {"content": " there"}}),
+        _json.dumps({"done": True}),
+    ]
+    manager._client = MagicMock()
+    manager._client.stream = MagicMock(return_value=_FakeStreamCM(lines))
+
+    tokens = [tok async for tok in manager.chat_stream_async("Hello?")]
+
+    assert tokens == ["Hi", " there"]
+    assert manager.history[1] == {"role": "user", "content": "Hello?"}
+    assert manager.history[2] == {"role": "assistant", "content": "Hi there"}
+
+
+# ===== Falsy-Zero Parameters (Phase 0.7) =====
+
+
+@pytest.mark.unit
+def test_zero_temperature_is_respected():
+    """temperature=0.0 must not silently fall back to the default."""
+    manager = ConversationManager(model="test-model", system_prompt="Test prompt")
+
+    payload = manager._build_payload("Test", temperature=0.0)
+
+    assert payload["options"]["temperature"] == 0.0
+
+
+@pytest.mark.unit
+def test_zero_max_tokens_is_respected():
+    """max_tokens=0 must not silently fall back to the default."""
+    manager = ConversationManager(model="test-model", system_prompt="Test prompt")
+
+    payload = manager._build_payload("Test", max_tokens=0)
+
+    assert payload["options"]["num_predict"] == 0
 
 
 @pytest.mark.unit
