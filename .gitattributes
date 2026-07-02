@@ -1,0 +1,25 @@
+# Normalize line endings: LF in the repo, native on checkout
+* text=auto
+
+# Explicit text types
+*.py text
+*.md text
+*.yml text
+*.yaml text
+*.toml text
+*.txt text
+*.json text
+*.jsonl text
+*.ini text
+*.cfg text
+
+# Binary types
+*.wav binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.gguf binary
+*.safetensors binary
+*.pt binary
+*.pth binary
+*.onnx binary

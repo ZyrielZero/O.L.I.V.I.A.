@@ -1,0 +1,172 @@
+# =============================================================
+# Private assets — NEVER commit (see docs/PRIVATE_ASSETS.md)
+# =============================================================
+assets/voice/
+data/training/
+config/character.yaml
+/models/
+lora/
+*.gguf
+*.safetensors
+
+# Old repo history archive (pre-bootstrap)
+.git-archive/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/memory_db/
+data/logs/
+logs/
+*.log
+outputs/*.wav
+
+# Generated artifacts
+evaluation_results.json
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Audio files
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# Model binaries
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# ML Cache
+.cache/
+huggingface/
+faster_whisper/
+
+# Test outputs
+test_output/
+*.test.wav
+
+# Type checking
+.mypy_cache/
+.pytype/
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# External dependencies
+external/
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Test coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+nosetests.xml
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+chroma.sqlite3
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+
+# FastAPI runtime
+*.pid
+uvicorn.pid
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# Ruff linter cache
+.ruff_cache/
+
+# Serialization formats
+*.pkl
+*.pickle
+
+# NumPy arrays
+*.npy
+*.npz
+
+# HDF5/Keras models
+*.h5
+
+# ML training logs
+lightning_logs/
+runs/
+wandb/
+
+# Pip logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Video files
+*.mp4
+*.avi
+*.mov
+
+# Parquet files (ChromaDB internals)
+*.parquet
+
+# NOTE: benchmarks/results/*.json is deliberately NOT ignored —
+# committed benchmark history is the optimization record (Phase 0.75)
