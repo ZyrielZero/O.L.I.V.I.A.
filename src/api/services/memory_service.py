@@ -9,7 +9,6 @@ from src.core.memory.smart_memory import SmartMemoryDB
 
 log = logging.getLogger("api.memory")
 
-# OPT: Constants avoid attribute lookups in hot paths
 MEM_TIMEOUT = 10.0
 _INIT_TIMEOUT = 30.0
 _HEALTH_TIMEOUT = 2.0
@@ -44,7 +43,6 @@ class MemoryService:
                 raise MemoryServiceError(f"Init failed: {e}")
 
         try:
-            # OPT: Use constant instead of literal for timeout
             self._db = await self._run_timeout(_load, "init", timeout=_INIT_TIMEOUT)
             log.info(f"Memory ready: {self.persist_directory}")
         except Exception as e:
@@ -102,16 +100,11 @@ class MemoryService:
     async def query_memory(
         self, query: str, n_results: int = 3, mem_type: str = "all"
     ) -> List[str]:
-        """Query memory db.
-
-        OPT: Uses asyncio.gather() for parallel facts + conversations queries when mem_type="all".
-        Sequential queries take O(t1 + t2), parallel takes O(max(t1, t2)).
-        """
+        """Query memory db; facts + conversations run in parallel for "all"."""
         if not self._db:
             raise MemoryServiceError("Not initialized")
 
         loop = asyncio.get_running_loop()
-        # OPT: Local references avoid repeated attribute lookups
         db = self._db
 
         def _query_facts():
@@ -136,8 +129,6 @@ class MemoryService:
             elif mem_type == "conversations":
                 return await loop.run_in_executor(None, _query_conversations)
             else:
-                # OPT: asyncio.gather() runs both queries in parallel
-                # Reduces latency from O(t1 + t2) to O(max(t1, t2))
                 facts_task = loop.run_in_executor(None, _query_facts)
                 convs_task = loop.run_in_executor(None, _query_conversations)
                 facts, convs = await asyncio.gather(facts_task, convs_task)
@@ -151,7 +142,6 @@ class MemoryService:
         if not self._db:
             raise MemoryServiceError("Not initialized")
 
-        # OPT: Local reference
         db = self._db
 
         def _stats():
@@ -163,14 +153,10 @@ class MemoryService:
         return await asyncio.get_running_loop().run_in_executor(None, _stats)
 
     async def health_check(self) -> bool:
-        """Fast heartbeat check.
-
-        OPT: Uses constant timeout, local reference for client.
-        """
+        """Fast heartbeat check."""
         try:
             if not self._db or not self._db.client:
                 return False
-            # OPT: Local reference avoids closure over self._db
             client = self._db.client
             return await self._run_timeout(
                 lambda: client.heartbeat() > 0, "heartbeat", timeout=_HEALTH_TIMEOUT

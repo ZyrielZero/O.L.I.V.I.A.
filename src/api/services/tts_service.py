@@ -17,17 +17,12 @@ from src.core.speech.chatterbox_tts import ChatterBoxConfig, ChatterBoxEngine
 
 log = logging.getLogger("api.tts")
 
-# OPT: Single GPU thread prevents CUDA contention - O(1) thread management
-# Multiple threads competing for GPU resources causes serialization overhead
-# and potential CUDA context switching, which is slower than sequential access
+# Single GPU thread: CUDA inference must be serialized on one thread
 _gpu_exec = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tts-gpu")
 
-# OPT: Pre-computed constants for audio conversion
-# Avoids repeated computation of 32767.0 and dtype lookups
 _INT16_MAX = np.float32(32767.0)
 _INT16_DTYPE = np.int16
 _FLOAT32_DTYPE = np.float32
-_INT16_MAX_RECIP = np.float32(1.0 / 32767.0)  # multiplication faster than division
 
 # Active TTS queue reference for barge-in cancellation
 _active_tts_queue: Optional["SentenceTTSQueue"] = None
@@ -97,11 +92,7 @@ class TTSService:
             raise ServiceInitializationError(f"TTS init failed: {e}")
 
     async def synthesize(self, text: str) -> bytes:
-        """Synthesize to PCM bytes (16-bit LE).
-
-        OPT: Uses pre-computed constants for dtype conversion.
-        Multiplication by _INT16_MAX is faster than in-place computation.
-        """
+        """Synthesize to PCM bytes (16-bit LE)."""
         if not self._engine_speaker_mode:
             raise SynthesisError("TTS not initialized")
 
@@ -110,17 +101,10 @@ class TTSService:
             chunks: list[np.ndarray] = []
             err = None
 
-            # OPT: Local references avoid global/attribute lookups in hot callback
-            int16_max = _INT16_MAX
-            int16_dtype = _INT16_DTYPE
-            chunks_append = chunks.append
-
             def cb(chunk: np.ndarray, sr: int):
                 nonlocal err
                 try:
-                    # OPT: np.multiply with out= avoids intermediate array allocation
-                    # Then astype creates the final int16 array
-                    chunks_append((chunk * int16_max).astype(int16_dtype))
+                    chunks.append((chunk * _INT16_MAX).astype(_INT16_DTYPE))
                 except Exception as e:
                     err = e
 
@@ -149,12 +133,11 @@ class TTSService:
             loop = asyncio.get_event_loop()
             chunks: list[np.ndarray] = []
             err = None
-            chunks_append = chunks.append
 
             def cb(chunk: np.ndarray, sr: int):
                 nonlocal err
                 try:
-                    chunks_append(chunk.copy())
+                    chunks.append(chunk.copy())
                 except Exception as e:
                     err = e
 
@@ -175,24 +158,17 @@ class TTSService:
             return np.concatenate(chunks) if chunks else np.array([], dtype=_FLOAT32_DTYPE)
 
     async def play_audio(self, audio: bytes) -> None:
-        """Play PCM audio.
-
-        OPT: Uses multiplication instead of division for int16->float32.
-        Multiplication is ~2x faster than division on most CPUs.
-        """
+        """Play PCM audio."""
         if not audio:
             return
 
         loop = asyncio.get_event_loop()
-        # OPT: Local references and pre-computed reciprocal
         sample_rate = self.config.sample_rate
-        int16_max_recip = _INT16_MAX_RECIP
 
         def _play():
             try:
-                # OPT: frombuffer with dtype, then multiply by reciprocal (faster than divide)
                 arr = np.frombuffer(audio, dtype=_INT16_DTYPE).astype(_FLOAT32_DTYPE)
-                arr *= int16_max_recip  # in-place multiply faster than arr / 32767.0
+                arr /= _INT16_MAX
                 sd.play(arr, samplerate=sample_rate)
                 sd.wait()
             except Exception:
@@ -218,10 +194,7 @@ class TTSService:
         await loop.run_in_executor(None, _play)
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
-        """Stream audio chunks (16-bit PCM LE).
-
-        OPT: Uses pre-computed constants and local references in callback.
-        """
+        """Stream audio chunks (16-bit PCM LE)."""
         if not self._engine_speaker_mode:
             raise SynthesisError("TTS not initialized")
 
@@ -231,16 +204,11 @@ class TTSService:
             done = asyncio.Event()
             err = None
 
-            # OPT: Local references for hot callback path
-            int16_max = _INT16_MAX
-            int16_dtype = _INT16_DTYPE
-            run_coro = asyncio.run_coroutine_threadsafe
-
             def cb(chunk: np.ndarray, sr: int):
                 nonlocal err
                 try:
-                    # OPT: Use local references, single chain of operations
-                    run_coro(q.put((chunk * int16_max).astype(int16_dtype).tobytes()), loop)
+                    audio_bytes = (chunk * _INT16_MAX).astype(_INT16_DTYPE).tobytes()
+                    asyncio.run_coroutine_threadsafe(q.put(audio_bytes), loop)
                 except Exception as e:
                     err = e
                     log.error(f"Audio callback error: {e}")

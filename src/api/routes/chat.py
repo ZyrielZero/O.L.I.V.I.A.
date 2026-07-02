@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from functools import lru_cache
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
@@ -18,21 +17,6 @@ from src.api.utils.tts_sanitizer import sanitize_for_tts
 
 log = logging.getLogger("api.chat")
 
-_GREETING_PATTERNS = frozenset(["hi", "hello", "hey", "thanks", "thank you"])
-
-
-@lru_cache(maxsize=64)
-def _is_simple_greeting(text_lower: str) -> bool:
-    """Check if text is a simple greeting.
-
-    Complexity: O(1) frozenset lookup after stripping.
-    Uses LRU cache to avoid repeated string operations on common inputs.
-    """
-    return text_lower.strip().rstrip("!?.") in _GREETING_PATTERNS
-
-
-# OPT: Pre-built JSON templates to avoid json.dumps() overhead per token
-# json.dumps({'token': '', 'done': True}) is ~1.5us vs template format ~0.3us
 _JSON_TOKEN_TEMPLATE = '{{"token": {}, "done": false}}'
 _JSON_DONE = '{"token": "", "done": true}'
 _JSON_ERROR_TEMPLATE = '{{"error": {}, "done": true}}'

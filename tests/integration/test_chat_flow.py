@@ -156,14 +156,14 @@ async def test_chat_token_accumulation():
 @pytest.mark.integration
 def test_greeting_detection():
     """Simple greetings are correctly identified."""
-    from src.api.routes.chat import _is_simple_greeting
+    from src.api.services.chat_service import ChatService
 
-    assert _is_simple_greeting("hi") is True
-    assert _is_simple_greeting("hello") is True
-    assert _is_simple_greeting("hey") is True
-    assert _is_simple_greeting("thanks") is True
-    assert _is_simple_greeting("tell me about python") is False
-    assert _is_simple_greeting("search for something") is False
+    assert ChatService._is_simple_greeting("hi") is True
+    assert ChatService._is_simple_greeting("hello") is True
+    assert ChatService._is_simple_greeting("hey") is True
+    assert ChatService._is_simple_greeting("thanks") is True
+    assert ChatService._is_simple_greeting("tell me about python") is False
+    assert ChatService._is_simple_greeting("search for something") is False
 
 
 @pytest.mark.integration
