@@ -84,10 +84,18 @@ def test_tts_service_imports():
 
 @pytest.mark.smoke
 def test_character_config_loads():
-    """Verify character.yaml loads and parses correctly."""
-    config_path = Path(__file__).parent.parent.parent / "config" / "character.yaml"
+    """Verify the character config loads and parses correctly.
 
-    assert config_path.exists(), f"character.yaml not found at {config_path}"
+    character.yaml is a private, gitignored per-machine file; on CI (and any
+    fresh clone) fall back to the committed template so its structure stays
+    validated too.
+    """
+    config_dir = Path(__file__).parent.parent.parent / "config"
+    config_path = config_dir / "character.yaml"
+    if not config_path.exists():
+        config_path = config_dir / "character.template.yaml"
+
+    assert config_path.exists(), f"No character config found in {config_dir}"
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
