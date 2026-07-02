@@ -28,7 +28,9 @@ async def test_llm_connection_error_handling():
     service = LLMService(
         model="test-model",
         system_prompt="Test",
-        host="http://localhost:99999"  # Invalid port
+        # Valid-but-refused port: an out-of-range port (e.g. 99999) raises
+        # OverflowError inside httpx on Linux instead of a connection error
+        host="http://127.0.0.1:1"
     )
 
     with pytest.raises(ServiceUnavailableError):
