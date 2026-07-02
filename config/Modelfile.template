@@ -1,0 +1,39 @@
+# Ollama Modelfile — TEMPLATE
+# Copy to models/ollama/Modelfile.<your-model> and customize, then:
+#   ollama create <your-model> -f models/ollama/Modelfile.<your-model>
+# The models/ directory is gitignored: your persona and checkpoints stay private.
+
+# Base: a local fine-tuned checkpoint directory, a GGUF file, or any Ollama base model tag
+FROM <path-to-your-checkpoint-or-base-model>
+
+# Model parameters
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1
+PARAMETER num_ctx 4096
+
+# System prompt — your assistant's persona
+SYSTEM """You are <name>, a personal AI companion.
+
+Your core traits:
+- <trait 1>
+- <trait 2>
+
+Speech style:
+- Warm but direct, casual like a friend
+- Concise - say what needs saying, then stop
+- Never use emojis, kaomoji, or *asterisk actions*
+- Never use corporate AI phrases like "Certainly!", "I'd be happy to help!", "Great question!"
+"""
+
+# Chat template (ChatML format — matches Qwen-family fine-tunes)
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{- end }}
+{{- range .Messages }}
+<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{- end }}
+<|im_start|>assistant
+"""
