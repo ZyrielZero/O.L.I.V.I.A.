@@ -1,0 +1,51 @@
+# O.L.I.V.I.A. DELLA-Linear Merge Configuration
+# Target: Olivia AI Companion Personality
+# Hardware: RTX 4080 SUPER (16GB VRAM)
+# 
+# Usage:
+#   mergekit-yaml olivia_della_merge.yaml ./olivia-merged-8b \
+#     --cuda --copy-tokenizer --allow-crimes --out-shard-size 5B \
+#     --lazy-unpickle --verbose
+
+merge_method: della_linear
+dtype: bfloat16
+base_model: meta-llama/Llama-3.1-8B
+
+parameters:
+  epsilon: 0.05
+  lambda: 1.0
+  normalize: true
+  int8_mask: true
+
+tokenizer_source: base
+
+models:
+  # ROLEPLAY CORE - Character consistency, multi-turn coherency
+  - model: Sao10K/Llama-3.1-8B-Stheno-v3.4
+    parameters:
+      weight: 0.30
+      density: 0.65
+
+  # INSTRUCTION FOLLOWING - System prompt adherence, tool use
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
+    parameters:
+      weight: 0.25
+      density: 0.55
+
+  # NATURAL SPEECH - Avoid AI slop, human-like conversation
+  - model: vicgalle/Humanish-Roleplay-Llama-3.1-8B
+    parameters:
+      weight: 0.20
+      density: 0.55
+
+  # UNCENSORED - Remove alignment refusals (upgraded to 3.0)
+  - model: cognitivecomputations/Dolphin3.0-Llama3.1-8B
+    parameters:
+      weight: 0.15
+      density: 0.50
+
+  # REASONING - Chain-of-thought, toggleable ON/OFF
+  - model: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+    parameters:
+      weight: 0.30
+      density: 0.65
