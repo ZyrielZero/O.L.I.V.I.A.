@@ -58,6 +58,29 @@ _executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
 # Reduces startup time from ~30s to ~5s by deferring model loading
 _lazy_load_tasks: list[asyncio.Task] = []
 
+# Daily TTL maintenance task (referenced so it can't be GC'd, cancelled on shutdown)
+_memory_maintenance_task: Optional[asyncio.Task] = None
+
+_MAINTENANCE_INTERVAL_S = 24 * 3600
+
+
+async def _memory_maintenance_loop(mem_svc) -> None:
+    """Run TTL pruning immediately on startup, then once a day.
+
+    Without this loop, prune_expired() is never called and conversations/
+    summaries accumulate forever.
+    """
+    while True:
+        try:
+            pruned = await mem_svc.prune_expired()
+            if pruned.get("conversations") or pruned.get("summaries"):
+                log.info(f"Memory TTL pruning removed: {pruned}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.error(f"Memory TTL pruning failed: {e}")
+        await asyncio.sleep(_MAINTENANCE_INTERVAL_S)
+
 
 async def _lazy_load_stt() -> None:
     """Background task to load STT model.
@@ -112,7 +135,7 @@ async def lifespan(app: FastAPI):
 
     This reduces startup time from ~30s to ~5s while maintaining full functionality.
     """
-    global startup_time, _executor, _lazy_load_tasks
+    global startup_time, _executor, _lazy_load_tasks, _memory_maintenance_task
 
     log.info("=" * 60)
     log.info("  O.L.I.V.I.A. API Starting")
@@ -156,6 +179,10 @@ async def lifespan(app: FastAPI):
         container.llm = llm_svc
         container.memory = mem_svc
         log.info("LLM + Memory ready")
+
+        # TTL maintenance: prune expired conversations/summaries now and daily
+        _memory_maintenance_task = asyncio.create_task(_memory_maintenance_loop(mem_svc))
+        log.info("Memory TTL maintenance scheduled (startup + daily)")
 
         # State manager - lightweight, no model loading
         from src.api.services.state_manager import StateManager
@@ -216,6 +243,13 @@ async def lifespan(app: FastAPI):
                 await task
             except asyncio.CancelledError:
                 pass
+
+    if _memory_maintenance_task and not _memory_maintenance_task.done():
+        _memory_maintenance_task.cancel()
+        try:
+            await _memory_maintenance_task
+        except asyncio.CancelledError:
+            pass
 
     container = get_container()
 

@@ -71,7 +71,6 @@ class MemoryService:
         if not self._db:
             raise MemoryServiceError("Not initialized")
 
-        # OPT: Local reference avoids repeated self._db lookups in closure
         db = self._db
 
         def _get():
@@ -81,7 +80,24 @@ class MemoryService:
                 log.error(f"Get context failed: {e}")
                 raise MemoryServiceError(f"Context retrieval failed: {e}")
 
-        return await asyncio.get_running_loop().run_in_executor(None, _get)
+        return await self._run_timeout(_get, "get_relevant_context")
+
+    async def prune_expired(self, conv_days: int = 30, summary_days: int = 365) -> Dict[str, int]:
+        """Remove expired conversations and summaries by TTL."""
+        if not self._db:
+            raise MemoryServiceError("Not initialized")
+
+        db = self._db
+
+        def _prune():
+            try:
+                return db.prune_expired(conv_days=conv_days, summary_days=summary_days)
+            except Exception as e:
+                log.error(f"TTL pruning failed: {e}")
+                raise MemoryServiceError(f"Pruning failed: {e}")
+
+        # Full-collection scan — allow more headroom than regular queries
+        return await self._run_timeout(_prune, "prune_expired", timeout=60.0)
 
     async def query_memory(
         self, query: str, n_results: int = 3, mem_type: str = "all"
