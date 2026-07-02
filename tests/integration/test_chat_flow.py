@@ -35,13 +35,13 @@ async def test_chat_with_memory_retrieval(mock_llm_service, mock_memory_service)
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_chat_memory_prefetch_short_message():
-    """Short messages skip memory prefetch."""
-    from src.api.routes.chat import _prefetch_memory
+    """Short messages skip the memory lookup."""
+    from src.api.routes.chat import _fetch_memory_context
 
     mock_memory = MagicMock()
     mock_memory.get_relevant_context = AsyncMock(return_value="context")
 
-    result = await _prefetch_memory(mock_memory, "hi there")
+    result = await _fetch_memory_context(mock_memory, "hi there")
     assert result == ""
     mock_memory.get_relevant_context.assert_not_called()
 

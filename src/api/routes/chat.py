@@ -38,14 +38,38 @@ _JSON_DONE = '{"token": "", "done": true}'
 _JSON_ERROR_TEMPLATE = '{{"error": {}, "done": true}}'
 
 
-async def _prefetch_memory(memory, msg: str, n=3) -> str:
-    """Prefetch memory context in background (runs parallel with search)."""
+# Hard cap on the pre-chat memory lookup: a slow Chroma query must not
+# stall chat startup — on timeout we proceed with no memory context
+_MEMORY_FETCH_TIMEOUT = 1.5
+
+# Strong references to fire-and-forget tasks: asyncio only keeps weak refs,
+# so a bare create_task() can be garbage-collected mid-flight and memory
+# writes silently vanish
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _create_bg_task(coro) -> asyncio.Task:
+    """Create a background task and keep a reference until it completes."""
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
+
+
+async def _fetch_memory_context(memory, msg: str, n=3) -> str:
+    """Fetch memory context for a message; empty string on failure/timeout."""
     if len(msg.split()) <= 6:  # skip greetings
         return ""
     try:
-        return await memory.get_relevant_context(msg, n_results=n)
+        return await asyncio.wait_for(
+            memory.get_relevant_context(msg, n_results=n),
+            timeout=_MEMORY_FETCH_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        log.warning(f"Memory lookup exceeded {_MEMORY_FETCH_TIMEOUT}s; continuing without it")
+        return ""
     except Exception as e:
-        log.warning(f"Memory prefetch failed: {e}")
+        log.warning(f"Memory fetch failed: {e}")
         return ""
 
 
@@ -87,16 +111,9 @@ async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDe
     try:
         ctx = request.context or ""
 
-        # prefetch memory
-        mem_task = asyncio.create_task(_prefetch_memory(memory, request.message))
-
-        # get memory context
-        try:
-            mem_ctx = await mem_task
-            if mem_ctx:
-                ctx = f"{ctx}\n\n{mem_ctx}" if ctx else mem_ctx
-        except Exception as e:
-            log.warning(f"Memory fetch failed: {e}")
+        mem_ctx = await _fetch_memory_context(memory, request.message)
+        if mem_ctx:
+            ctx = f"{ctx}\n\n{mem_ctx}" if ctx else mem_ctx
 
         if request.stream:
 
@@ -154,7 +171,7 @@ async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDe
 
                     full_resp = "".join(resp_chunks)
 
-                    asyncio.create_task(_store_conversation(memory, request.message, full_resp))
+                    _create_bg_task(_store_conversation(memory, request.message, full_resp))
 
                     # UI gets done signal immediately — TTS continues playing in background
                     yield f"data: {_JSON_DONE}\n\n"
@@ -196,12 +213,12 @@ async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDe
                 resp_chunks.append(tok)
             full_resp = "".join(resp_chunks)
 
-            asyncio.create_task(_store_conversation(memory, request.message, full_resp))
+            _create_bg_task(_store_conversation(memory, request.message, full_resp))
 
             if full_resp:
                 tts = get_service("tts")
                 if tts and tts.is_initialized():
-                    asyncio.create_task(_speak_bg(tts, sanitize_for_tts(full_resp)))
+                    _create_bg_task(_speak_bg(tts, sanitize_for_tts(full_resp)))
 
             return ChatResponse(
                 message=full_resp,

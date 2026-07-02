@@ -57,8 +57,9 @@ class OliviaApp:
         self.page.window.prevent_close = True
         self.page.window.on_event = self._on_window_event
 
-        # Initialize backend connection
-        asyncio.create_task(self._initialize_backend())
+        # Initialize backend connection (reference kept: asyncio holds only
+        # weak refs, and losing this task would silently skip backend init)
+        self._init_task = asyncio.create_task(self._initialize_backend())
 
     def build(self):
         """Build main layout."""
