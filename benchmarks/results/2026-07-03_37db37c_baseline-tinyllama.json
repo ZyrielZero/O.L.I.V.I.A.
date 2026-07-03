@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "date": "2026-07-03T00:05:50",
+    "git_sha": "37db37c",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.9",
+    "ollama_model": "tinyllama:latest",
+    "torch": "2.10.0+cu128",
+    "gpu": "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "cuda": "12.8",
+    "driver": "592.19"
+  },
+  "stages": {
+    "vad": {
+      "per_chunk": {
+        "mean_ms": 1.0,
+        "median_ms": 0.48,
+        "p95_ms": 0.66,
+        "min_ms": 0.36,
+        "max_ms": 3.1,
+        "samples": 5
+      }
+    },
+    "stt": {
+      "transcribe_2s": {
+        "mean_ms": 139.1,
+        "median_ms": 137.73,
+        "p95_ms": 141.15,
+        "min_ms": 117.96,
+        "max_ms": 169.95,
+        "samples": 5
+      },
+      "vram_peak_mb": 0.0
+    },
+    "llm": {
+      "ttft": {
+        "mean_ms": 549.4,
+        "median_ms": 361.11,
+        "p95_ms": 385.26,
+        "min_ms": 350.02,
+        "max_ms": 2241.92,
+        "samples": 10
+      },
+      "total": {
+        "mean_ms": 872.45,
+        "median_ms": 722.51,
+        "p95_ms": 737.38,
+        "min_ms": 487.65,
+        "max_ms": 2557.07,
+        "samples": 10
+      },
+      "tokens_per_second_mean": 112.2,
+      "vram_peak_mb": 0.0
+    },
+    "tts": {
+      "ttfb": {
+        "mean_ms": 7352.92,
+        "median_ms": 7338.39,
+        "p95_ms": 7532.0,
+        "min_ms": 6087.36,
+        "max_ms": 8612.84,
+        "samples": 5
+      },
+      "total": {
+        "mean_ms": 7353.2,
+        "median_ms": 7338.54,
+        "p95_ms": 7532.15,
+        "min_ms": 6087.56,
+        "max_ms": 8613.6,
+        "samples": 5
+      },
+      "vram_peak_mb": 3506.5
+    },
+    "voice_to_voice": {
+      "estimated_ttfa_mean_ms": 8041.42,
+      "estimated_ttfa_p95_ms": 8058.41,
+      "method": "component sum (stt + llm_ttft + tts_ttfb), not a chained run"
+    }
+  }
+}
