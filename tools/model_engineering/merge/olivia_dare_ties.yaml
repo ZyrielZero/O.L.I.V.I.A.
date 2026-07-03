@@ -1,0 +1,67 @@
+# =============================================================================
+# O.L.I.V.I.A. DARE-TIES Merge Configuration
+# The merge experiment, main arm. All-Llama-3.1 lineage, single prompt-format
+# family (L3.1 Instruct base) — avoids the template/tokenizer collisions that
+# sank the DELLA attempts (see README.md in this folder).
+#
+# Usage (inside WSL2, from tools/model_engineering/merge/):
+#   ./run_merge.sh olivia_dare_ties.yaml
+# which runs (CPU merge — the GPU stays free):
+#   mergekit-yaml olivia_dare_ties.yaml out/olivia_dare_ties \
+#     --out-shard-size 5B --lazy-unpickle --verbose
+#
+# Tuning rule: one variable at a time; the edge donor's weight moves at most
+# 0.05 per run. Losing configs stay committed — negative results are results.
+# =============================================================================
+
+merge_method: dare_ties
+dtype: bfloat16
+
+# Instruct base via ungated mirror. Donors are all L3.1-Instruct derivatives,
+# so deltas are computed against the format they were actually trained on.
+base_model: NousResearch/Meta-Llama-3.1-8B-Instruct
+
+# Force tokenizer/chat template from base only (hard-learned DELLA lesson)
+tokenizer_source: base
+
+parameters:
+  # Default keep-density for DARE sparsification (per-model overrides below).
+  # Documented sweet spot is 0.85-0.9; the mergekit default (~0.6) underperforms.
+  density: 0.9
+  # int8 sign mask — memory saving, empirically slightly better results
+  int8_mask: true
+  # Rescale retained deltas by 1/p after the random drop (the core DARE step)
+  rescale: true
+  # Renormalize weights to sum to 1 (they sum to 0.95 below — explicit > implicit)
+  normalize: true
+
+models:
+  # =========================================================================
+  # ROLEPLAY CORE - The voice: multi-turn coherency, system-prompt adherence
+  # Llama 3.1 Instruct format - primary personality source
+  # =========================================================================
+  - model: Sao10K/Llama-3.1-8B-Stheno-v3.4
+    parameters:
+      weight: 0.4
+      density: 0.9
+
+  # =========================================================================
+  # INSTRUCTION FOLLOWING - Tool-calling + structured-output insurance
+  # =========================================================================
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
+    parameters:
+      weight: 0.35
+      density: 0.9
+
+  # =========================================================================
+  # THE EDGE - Reduced positivity bias, vivid non-slop prose
+  # Flavor donor, not a pillar: "a bit unhinged" is a 0.2 statement.
+  # Verify this repo id resolves on HF before the first download — DavidAU
+  # ships many Dark Planet variants and it MUST be the L3.1 one (never mix
+  # L3 / L3.1 / L3.2 lineages). Alternates: DarkIdol 1.2, Dolphin 3.0.
+  # NO abliterated donors — documented instability, merges amplify it.
+  # =========================================================================
+  - model: DavidAU/L3.1-Dark-Planet-8B
+    parameters:
+      weight: 0.2
+      density: 0.85
