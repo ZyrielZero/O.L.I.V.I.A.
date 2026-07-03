@@ -19,3 +19,5 @@ class HealthCheck(BaseModel):
     status: str  # healthy/degraded/unhealthy
     services: Dict[str, ServiceHealth]
     uptime_seconds: float
+    # Rolling voice-pipeline latency averages (Phase 1.6): stage -> {avg_ms, p95_ms, n}
+    latency: Optional[Dict[str, Dict[str, float]]] = None

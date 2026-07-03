@@ -160,8 +160,14 @@ async def health_check() -> HealthCheck:
         )
 
     from src.api.main import get_startup_time
+    from src.api.services.metrics import get_metrics
 
     t0 = get_startup_time()
     uptime = (datetime.now() - t0).total_seconds() if t0 else 0
 
-    return HealthCheck(status=status, services=svc_health, uptime_seconds=uptime)
+    return HealthCheck(
+        status=status,
+        services=svc_health,
+        uptime_seconds=uptime,
+        latency=get_metrics().averages() or None,
+    )

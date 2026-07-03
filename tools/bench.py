@@ -19,6 +19,7 @@ Compare two results:
 import argparse
 import asyncio
 import json
+import math
 import platform
 import statistics
 import subprocess
@@ -51,10 +52,11 @@ def _stats(samples_ms):
     if not samples_ms:
         return None
     ordered = sorted(samples_ms)
+    p95_idx = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * 0.95) - 1))
     return {
         "mean_ms": round(statistics.mean(ordered), 2),
         "median_ms": round(statistics.median(ordered), 2),
-        "p95_ms": round(ordered[max(0, int(len(ordered) * 0.95) - 1)], 2),
+        "p95_ms": round(ordered[p95_idx], 2),
         "min_ms": round(ordered[0], 2),
         "max_ms": round(ordered[-1], 2),
         "samples": len(ordered),
