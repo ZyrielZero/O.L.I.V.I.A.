@@ -80,6 +80,38 @@ class MemoryService:
 
         return await self._run_timeout(_get, "get_relevant_context")
 
+    async def browse_memory(
+        self, mem_type: str = "facts", query: Optional[str] = None, n_results: int = 10
+    ) -> List[Dict]:
+        """List or search entries in one tier (id + document + metadata)."""
+        if not self._db:
+            raise MemoryServiceError("Not initialized")
+        db = self._db
+        return await self._run_timeout(
+            lambda: db.browse_entries(mem_type, query, n_results), "browse_memory"
+        )
+
+    async def add_fact(self, fact: str, category: str = "general") -> Optional[str]:
+        """Store a fact; returns the new entry id."""
+        if not self._db:
+            raise MemoryServiceError("Not initialized")
+        db = self._db
+        return await self._run_timeout(lambda: db.add_fact(fact, category), "add_fact")
+
+    async def delete_entry(self, entry_id: str) -> bool:
+        """Delete one entry by id; False if it doesn't exist."""
+        if not self._db:
+            raise MemoryServiceError("Not initialized")
+        db = self._db
+        return await self._run_timeout(lambda: db.delete_entry(entry_id), "delete_entry")
+
+    async def db_size_bytes(self) -> int:
+        """On-disk size of the memory database."""
+        if not self._db:
+            raise MemoryServiceError("Not initialized")
+        db = self._db
+        return await self._run_timeout(db.db_size_bytes, "db_size")
+
     async def prune_expired(self, conv_days: int = 30, summary_days: int = 365) -> Dict[str, int]:
         """Remove expired conversations and summaries by TTL."""
         if not self._db:

@@ -20,6 +20,7 @@ lora/
 # Runtime data
 data/memory_db/
 data/logs/
+data/settings.json
 logs/
 *.log
 outputs/*.wav

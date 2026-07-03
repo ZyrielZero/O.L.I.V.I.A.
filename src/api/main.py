@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.config import APIConfig
 from src.api.container import get_container
 from src.api.middleware import ErrorHandlingMiddleware, LoggingMiddleware
-from src.api.routes import chat, health, voice
+from src.api.routes import chat, health, memory, settings, voice
 
 _LOG_FMT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -334,6 +334,8 @@ app.add_middleware(ErrorHandlingMiddleware)
 app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(voice.router)
+app.include_router(memory.router)
+app.include_router(settings.router)
 
 
 @app.get("/")

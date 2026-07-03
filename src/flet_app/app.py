@@ -352,9 +352,21 @@ class OliviaApp:
         self.page.update()
 
     async def _open_settings(self, e=None):
-        """Open settings dialog."""
-        # Get current settings from state manager
+        """Open settings dialog, seeded from the backend's persisted settings."""
         state = self.state_manager.state
+
+        # Server-side settings win over local state when reachable (Phase 2)
+        server = await self.api_client.get_settings()
+        if server:
+            self.state_manager.update(
+                voice_enabled=server.get("voice_enabled", state.voice_enabled),
+                always_listen_enabled=server.get(
+                    "always_listen_enabled", state.always_listen_enabled
+                ),
+                wake_word_enabled=server.get("wake_word_enabled", state.wake_word_enabled),
+                auto_chat_enabled=server.get("auto_chat_enabled", state.auto_chat_enabled),
+            )
+            state = self.state_manager.state
 
         self.settings_dialog = SettingsDialog(
             on_close=self._on_settings_close,
@@ -369,9 +381,17 @@ class OliviaApp:
         self.page.update()
 
     def _on_settings_close(self, settings: dict):
-        """Handle settings dialog close."""
-        # Update state manager with new settings
+        """Handle settings dialog close: update local state and persist server-side."""
         self.state_manager.update(**settings)
+        server_keys = (
+            "voice_enabled",
+            "always_listen_enabled",
+            "wake_word_enabled",
+            "auto_chat_enabled",
+        )
+        payload = {k: v for k, v in settings.items() if k in server_keys}
+        if payload:
+            self._settings_task = asyncio.create_task(self.api_client.update_settings(payload))
         log.info(f"Settings updated: {settings}")
 
     def _show_error_dialog(self, title: str, message: str):

@@ -137,10 +137,10 @@ class SmartMemoryDB:
     # TIER 1: FACTS
     # =========================================================================
 
-    def add_fact(self, fact: str, category: str = "general") -> None:
-        """Store a key fact about the user."""
+    def add_fact(self, fact: str, category: str = "general") -> Optional[str]:
+        """Store a key fact about the user. Returns the new entry id."""
         if not fact.strip():
-            return
+            return None
 
         fact_id = self._gen_id("fact")
 
@@ -150,6 +150,7 @@ class SmartMemoryDB:
             ids=[fact_id],
         )
         self.log.info(f"Stored fact: {fact[:50]}...")
+        return fact_id
 
     def get_all_facts(self) -> str:
         """Get all stored facts as formatted string."""
@@ -463,6 +464,78 @@ class SmartMemoryDB:
             return ""
 
         return "\n---\n".join(merged[:n_results])
+
+    # =========================================================================
+    # BROWSING / MANAGEMENT (memory API, Phase 2)
+    # =========================================================================
+
+    _TYPE_TO_COLLECTION = {"facts": "facts", "conversations": "conversations", "summaries": "summaries"}
+    _ID_PREFIX_TO_TYPE = {"fact": "facts", "conv": "conversations", "summary": "summaries"}
+
+    def browse_entries(self, mem_type: str, query: Optional[str] = None, n: int = 10) -> List[Dict]:
+        """List or semantically search one tier; newest first when listing.
+
+        Returns [{id, document, metadata, type}].
+        """
+        attr = self._TYPE_TO_COLLECTION.get(mem_type)
+        if attr is None:
+            raise ValueError(f"Unknown memory type: {mem_type}")
+        collection = getattr(self, attr)
+        count = collection.count()
+        if count == 0:
+            return []
+
+        if query:
+            res = collection.query(query_texts=[query], n_results=min(n, count))
+            ids = (res.get("ids") or [[]])[0]
+            docs = (res.get("documents") or [[]])[0]
+            metas = (res.get("metadatas") or [[]])[0]
+        else:
+            meta_res = collection.get(include=["metadatas"])
+            stamped = sorted(
+                zip(meta_res.get("ids") or [], meta_res.get("metadatas") or []),
+                key=lambda x: (x[1] or {}).get("timestamp", ""),
+                reverse=True,
+            )
+            ids = [i for i, _ in stamped[:n]]
+            doc_res = collection.get(ids=ids, include=["documents", "metadatas"])
+            by_id = {
+                i: (d, m)
+                for i, d, m in zip(
+                    doc_res.get("ids") or [],
+                    doc_res.get("documents") or [],
+                    doc_res.get("metadatas") or [],
+                )
+            }
+            docs = [by_id[i][0] for i in ids if i in by_id]
+            metas = [by_id[i][1] for i in ids if i in by_id]
+            ids = [i for i in ids if i in by_id]
+
+        return [
+            {"id": i, "document": str(d), "metadata": m or {}, "type": mem_type}
+            for i, d, m in zip(ids, docs, metas)
+        ]
+
+    def delete_entry(self, entry_id: str) -> bool:
+        """Delete one entry by id (id prefix selects the tier)."""
+        prefix = entry_id.split("_", 1)[0]
+        attr = self._ID_PREFIX_TO_TYPE.get(prefix)
+        if attr is None:
+            return False
+        collection = getattr(self, attr)
+        existing = collection.get(ids=[entry_id])
+        if not (existing and existing.get("ids")):
+            return False
+        collection.delete(ids=[entry_id])
+        self.log.info(f"Deleted memory entry: {entry_id}")
+        return True
+
+    def db_size_bytes(self) -> int:
+        """Total on-disk size of the memory database."""
+        root = Path(self._persist_dir)
+        if not root.exists():
+            return 0
+        return sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
 
     # =========================================================================
     # MAINTENANCE

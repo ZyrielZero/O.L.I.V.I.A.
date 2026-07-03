@@ -112,6 +112,28 @@ def test_get_recent_conversations_respects_limit(mem_db):
     assert len(mem_db.get_recent_conversations(50)) == 5
 
 
+# ===== Phase 2: browse / delete management surface =====
+
+
+@pytest.mark.integration
+def test_browse_add_delete_roundtrip(mem_db):
+    fact_id = mem_db.add_fact("User plays guitar", "hobby")
+    assert fact_id
+
+    entries = mem_db.browse_entries("facts")
+    match = [e for e in entries if e["id"] == fact_id]
+    assert match and match[0]["document"] == "User plays guitar"
+    assert match[0]["metadata"]["category"] == "hobby"
+
+    searched = mem_db.browse_entries("facts", query="guitar")
+    assert any(e["id"] == fact_id for e in searched)
+
+    assert mem_db.delete_entry(fact_id) is True
+    assert mem_db.delete_entry(fact_id) is False  # already gone
+    assert mem_db.delete_entry("bogus_id") is False
+    assert mem_db.db_size_bytes() > 0
+
+
 # ===== 0.8: search_all merges tiers deterministically =====
 
 

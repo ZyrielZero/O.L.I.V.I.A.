@@ -51,12 +51,11 @@ router = APIRouter(tags=["voice"])
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 512  # Silero VAD v5 operates on 512-sample windows @16k
 
-# VAD gating (mirrors ContinuousSTT, tuned for server-side use)
-VAD_THRESHOLD = 0.5
-VAD_THRESHOLD_WHILE_SPEAKING_OUT = 0.7   # stricter while TTS audio is in flight
-SILENCE_END_S = 0.5                       # this much silence ends an utterance
+# Defaults for the tunable values live in RuntimeSettings (settings_service);
+# these constants remain as fixed limits / documented defaults
+SILENCE_END_S = 0.5                       # default; runtime value from settings
 MIN_SPEECH_S = 0.3                        # shorter bursts are discarded
-BARGE_IN_CONFIRM_CHUNKS = 5               # ~160ms of confident speech to interrupt
+BARGE_IN_CONFIRM_CHUNKS = 5               # default; runtime value from settings
 MAX_UTTERANCE_S = 30.0
 
 _INT16_MAX = np.float32(32767.0)
@@ -127,9 +126,14 @@ class VoiceSession:
     async def _process_chunk(self, chunk: np.ndarray) -> None:
         import torch
 
+        from src.api.services.settings_service import get_settings_service
+
+        settings = get_settings_service().get()
         loop = asyncio.get_running_loop()
         threshold = (
-            VAD_THRESHOLD_WHILE_SPEAKING_OUT if self._tts_playing else VAD_THRESHOLD
+            min(settings.vad_threshold + 0.2, 0.95)
+            if self._tts_playing
+            else settings.vad_threshold
         )
 
         def _vad() -> float:
@@ -144,7 +148,7 @@ class VoiceSession:
             # residual echo can't interrupt playback (Phase 1.4)
             if is_speech:
                 self._speech_confirm += 1
-                if self._speech_confirm >= BARGE_IN_CONFIRM_CHUNKS:
+                if self._speech_confirm >= settings.barge_in_confirm_chunks:
                     await self._barge_in()
             else:
                 self._speech_confirm = 0
@@ -164,7 +168,7 @@ class VoiceSession:
         elif self._speaking:
             self._silence_chunks += 1
             self._speech.append(chunk)  # keep trailing context for STT
-            if self._silence_chunks * chunk_s >= SILENCE_END_S:
+            if self._silence_chunks * chunk_s >= settings.silence_end_s:
                 await self._end_utterance()
 
     # -- pipeline ---------------------------------------------------------------

@@ -144,6 +144,26 @@ class OliviaAPIClient:
             log.error(f"Clear history failed: {e}")
             return False
 
+    async def get_settings(self) -> Optional[Dict[str, Any]]:
+        """Fetch runtime settings from the backend."""
+        try:
+            response = await self.client.get(f"{self.base_url}/api/settings")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f"Get settings failed: {e}")
+            return None
+
+    async def update_settings(self, settings: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Push a partial settings update; returns the new settings."""
+        try:
+            response = await self.client.put(f"{self.base_url}/api/settings", json=settings)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f"Update settings failed: {e}")
+            return None
+
     async def close(self):
         """Close client connection."""
         await self.client.aclose()
