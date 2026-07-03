@@ -119,6 +119,89 @@ async def test_memory_maintenance_loop_prunes_immediately():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_lifespan_wires_memory_maintenance(monkeypatch):
+    """The API lifespan must actually schedule TTL pruning.
+
+    This is a wiring test: prune_expired() existed for months while nothing
+    called it, and the mock-based suite couldn't see that. It fails if the
+    lifespan stops scheduling the maintenance task.
+    """
+    from unittest.mock import MagicMock
+
+    from src.api import main as api_main
+    from src.api.container import reset_container
+
+    class StubLLM:
+        async def initialize(self):
+            pass
+
+        async def cleanup(self):
+            pass
+
+        def is_initialized(self):
+            return True
+
+    class StubMemory:
+        def __init__(self, *a, **kw):
+            self._db = MagicMock()
+            self.prune_calls = 0
+
+        async def initialize(self):
+            pass
+
+        async def prune_expired(self, **kw):
+            self.prune_calls += 1
+            return {"conversations": 0, "summaries": 0}
+
+        def is_initialized(self):
+            return True
+
+    stub_mem = StubMemory()
+
+    class StubConfig:
+        def get(self, key, default=None):
+            return "stub"
+
+        def get_system_prompt(self):
+            return "stub prompt"
+
+    monkeypatch.setattr(
+        "src.api.services.llm_service.LLMService", lambda **kw: StubLLM()
+    )
+    monkeypatch.setattr(
+        "src.api.services.memory_service.MemoryService", lambda **kw: stub_mem
+    )
+    monkeypatch.setattr("src.config.config_loader.get_config", lambda: StubConfig())
+    monkeypatch.setattr(api_main, "_lazy_load_stt", AsyncMock())
+    monkeypatch.setattr(api_main, "_lazy_load_tts", AsyncMock())
+
+    def _no_dreaming(*a, **kw):
+        raise RuntimeError("disabled in test")
+
+    monkeypatch.setattr(
+        "src.experimental.memory.dreaming.create_dreaming_engine", _no_dreaming
+    )
+
+    reset_container()
+    try:
+        async with api_main.lifespan(MagicMock()):
+            task = api_main._memory_maintenance_task
+            assert task is not None, "lifespan did not schedule memory maintenance"
+            for _ in range(100):
+                if stub_mem.prune_calls:
+                    break
+                await asyncio.sleep(0.01)
+            assert stub_mem.prune_calls >= 1, "maintenance task never pruned"
+            assert not task.done()
+
+        # Shutdown cancels the maintenance task
+        assert api_main._memory_maintenance_task.done()
+    finally:
+        reset_container()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_memory_maintenance_loop_survives_prune_failure():
     """A pruning failure must not kill the daily loop."""
     from src.api import main as api_main
