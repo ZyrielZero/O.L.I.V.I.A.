@@ -1,18 +1,21 @@
 # O.L.I.V.I.A. Model Engineering Tools
 
-Scripts for model merging, fine-tuning, and GGUF conversion.
+Scripts for fine-tuning, preference training, GGUF conversion, and model merging.
 
 ## Directory Structure
 
 ```
 tools/model_engineering/
 ├── finetune_olivia.py      # QLoRA fine-tuning script
+├── train_dpo.py            # DPO preference training
 ├── merge_lora.py           # Merge LoRA adapter + export GGUF
-├── convert_to_gguf.py      # Manual GGUF conversion (Windows)
-├── verify_merge.py         # Verify merged model quality
-├── configs/
-│   ├── olivia_della_merge.yaml      # DELLA merge config v1
-│   └── olivia_della_merge_v2.yaml   # DELLA merge config v2
+├── convert_hf_to_gguf.py   # Vendored from llama.cpp (excluded from ruff)
+├── merge/                  # Model-merge experiment kit (see merge/README.md)
+│   ├── olivia_dare_ties.yaml
+│   ├── olivia_slerp_control.yaml
+│   ├── run_merge.sh
+│   ├── verify_merge.py     # Post-merge tokenizer + load smoke test
+│   └── results/            # Committed eval result JSONs
 └── README.md
 ```
 
@@ -34,7 +37,7 @@ pip install unsloth transformers datasets trl gguf sentencepiece
 
 ### 1. Fine-tune the Model
 
-Run QLoRA fine-tuning on the merged base model:
+Run QLoRA fine-tuning on the base model:
 
 ```bash
 python tools/model_engineering/finetune_olivia.py
@@ -47,7 +50,13 @@ python tools/model_engineering/finetune_olivia.py
 
 **Output:** LoRA adapter at `models/adapters/olivia-lora-output/`
 
-### 2. Merge LoRA and Export GGUF
+### 2. (Optional) DPO Preference Training
+
+```bash
+python tools/model_engineering/train_dpo.py
+```
+
+### 3. Merge LoRA and Export GGUF
 
 Merge the fine-tuned LoRA adapter back into the base model:
 
@@ -60,35 +69,32 @@ python tools/model_engineering/merge_lora.py
 - GGUF file at `models/gguf/olivia-finetuned-q4_k_m.gguf`
 - Modelfile at `models/ollama/Modelfile.olivia-finetuned`
 
-### 3. Create Ollama Model
+GGUF conversion uses `convert_hf_to_gguf.py`, vendored from
+[llama.cpp](https://github.com/ggerganov/llama.cpp) (not our code to lint —
+excluded in `pyproject.toml`).
+
+### 4. Create Ollama Model
 
 ```bash
 cd models/ollama
 ollama create olivia-finetuned -f Modelfile.olivia-finetuned
 ```
 
-### 4. Test
+### 5. Test
 
 ```bash
 ollama run olivia-finetuned "Hey"
 ```
 
-## Alternative: Manual GGUF Conversion
+## Model Merging
 
-If `merge_lora.py` fails to create GGUF, use the manual script:
-
-```bash
-python tools/model_engineering/convert_to_gguf.py
-```
-
-This downloads llama.cpp binaries and converts manually.
-
-## Verify Merge Quality
-
-Check tokenizer and generation:
+The merge experiment (DARE-TIES main arm + SLERP control) lives in
+[`merge/`](merge/README.md) with its own configs, runner, and smoke test:
 
 ```bash
-python tools/model_engineering/verify_merge.py
+cd tools/model_engineering/merge
+./run_merge.sh olivia_dare_ties.yaml        # WSL2, CPU-only
+python verify_merge.py out/olivia_dare_ties # tokenizer + load check
 ```
 
 ## Model Locations
@@ -101,6 +107,8 @@ python tools/model_engineering/verify_merge.py
 | Ollama Modelfiles | `models/ollama/` |
 | Source models (for merge) | `models/source/` |
 
+All of `models/` is gitignored — weights never enter the repo.
+
 ## Training Data Format
 
 Training data uses ShareGPT format (JSONL):
@@ -111,19 +119,3 @@ Training data uses ShareGPT format (JSONL):
   {"from": "gpt", "value": "Hey there. What's up?"}
 ]}
 ```
-
-## DELLA Merge (Advanced)
-
-To re-run the DELLA model merge:
-
-1. Install mergekit: `pip install mergekit`
-2. Download source models to `models/source/`
-3. Run: `mergekit-yaml configs/olivia_della_merge_v2.yaml models/checkpoints/olivia-merged-v2`
-
-Source models needed:
-- meta-llama/Llama-3.1-8B
-- Sao10K/Stheno-v3.4-Llama-3.1-8B
-- NousResearch/Hermes-3-Llama-3.1-8B
-- vicgalle/Humanish-LLama3.1-8B-Roleplay
-- cognitivecomputations/dolphin-2.9.4-llama3.1-8b
-- nvidia/Llama-3.1-Nemotron-Nano-8B-v1

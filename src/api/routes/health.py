@@ -137,7 +137,7 @@ async def health_check() -> HealthCheck:
         if status == "healthy":
             status = "degraded"
 
-    # experimental: dreaming engine
+    # background memory: dreaming engine
     dreaming = dependencies.services.get("dreaming")
     if dreaming:
         idle_active = (
@@ -149,7 +149,7 @@ async def health_check() -> HealthCheck:
             message="Idle monitoring active" if idle_active else "Standby",
         )
 
-    # experimental: fact extractor
+    # background memory: fact extractor
     extractor = dependencies.services.get("fact_extractor")
     if extractor:
         stats = extractor.get_stats()

@@ -16,19 +16,17 @@
    - 3.2 [Memory System](#32-memory-system)
    - 3.3 [Speech-to-Text (Ears)](#33-speech-to-text-ears)
    - 3.4 [Text-to-Speech (Mouth)](#34-text-to-speech-mouth)
-   - 3.5 [Web Search](#35-web-search)
 4. [API Layer](#4-api-layer)
    - 4.1 [FastAPI Application](#41-fastapi-application)
    - 4.2 [Service Container](#42-service-container)
    - 4.3 [API Endpoints](#43-api-endpoints)
-   - 4.4 [Chat Service](#44-chat-service)
-   - 4.5 [Configuration](#45-configuration)
-   - 4.6 [Constants](#46-constants)
+   - 4.4 [Configuration](#44-configuration)
+   - 4.5 [Constants](#45-constants)
 5. [Desktop UI (Flet)](#5-desktop-ui-flet)
    - 5.1 [Application Architecture](#51-application-architecture)
    - 5.2 [Theme System](#52-theme-system)
    - 5.3 [Components](#53-components)
-6. [Experimental Features](#6-experimental-features)
+6. [Background Memory Systems](#6-background-memory-systems)
    - 6.1 [Dreaming Engine](#61-dreaming-engine)
    - 6.2 [Fact Extractor](#62-fact-extractor)
 7. [Personality System](#7-personality-system)
@@ -43,11 +41,12 @@
 
 O.L.I.V.I.A. is a fully local AI companion featuring:
 
-- **Voice Interaction**: Push-to-talk and continuous listening with VAD
+- **Voice Interaction**: Push-to-talk, continuous listening with VAD, and a full-duplex `/ws/voice` WebSocket pipeline
 - **Persistent Memory**: Three-tier ChromaDB storage with semantic search
 - **Character-Driven Personality**: Warm but direct, concise, no corporate AI speak
-- **Web Search**: Multi-source research with ad filtering
-- **Memory Consolidation**: LLM-powered dreaming system for fact extraction
+- **Memory Consolidation**: LLM-powered dreaming system for fact extraction (runs in the background)
+
+Fully offline: no web search, telemetry, or external network dependencies beyond the local Ollama server.
 
 ### The Body Metaphor
 
@@ -57,8 +56,8 @@ O.L.I.V.I.A. is a fully local AI companion featuring:
 | **Ears** | STT | faster-whisper (small.en) | `src/core/speech/stt.py` | ~1GB |
 | **Mouth** | TTS | ChatterBox Turbo | `src/core/speech/chatterbox_tts.py` | ~2GB |
 | **Memory** | ChromaDB | 3-tier architecture | `src/core/memory/smart_memory.py` | ~0.5GB |
-| **Dreaming** | Consolidation | LLM summarization | `src/experimental/memory/dreaming.py` | - |
-| **Instincts** | Fact Extraction | Regex + LLM hybrid | `src/experimental/memory/fact_extractor.py` | - |
+| **Dreaming** | Consolidation | LLM summarization | `src/core/memory/dreaming.py` | - |
+| **Instincts** | Fact Extraction | Regex + LLM hybrid | `src/core/memory/fact_extractor.py` | - |
 
 ---
 
@@ -77,7 +76,7 @@ O.L.I.V.I.A. is a fully local AI companion featuring:
 +--------------------+----------------------+
 |         FastAPI Backend                   |
 |  (src/api/)                               |
-|  - REST API endpoints                     |
+|  - REST + /ws/voice WebSocket endpoints   |
 |  - Service wrappers with DI              |
 |  - Two-phase startup                      |
 +--------------------+----------------------+
@@ -90,15 +89,15 @@ O.L.I.V.I.A. is a fully local AI companion featuring:
 |  - ChromaDB memory                        |
 |  - faster-whisper STT                     |
 |  - ChatterBox TTS                         |
-|  - Web search engine                      |
+|  - Dreaming + fact extraction             |
 +-------------------------------------------+
 ```
 
 ### Request Flow
 
 ```
-User Input -> FastAPI -> Search Detection -> Parallel Fetch (Memory + Web)
-          -> LLM Streaming -> Store Conversation -> TTS Queue -> Audio Output
+User Input -> FastAPI -> Memory Prefetch -> LLM Streaming
+          -> Store Conversation -> Session TTS Queue -> Audio Output
 ```
 
 ---
@@ -448,87 +447,6 @@ def _cleanup_cuda_memory(self):
 
 ---
 
-### 3.5 Web Search
-
-**Location:** `src/core/tools/web_search.py`
-
-#### SearchConfig
-
-```python
-class SearchConfig:
-    MAX_SEARCH_RESULTS = 10
-    MAX_SCRAPE_RESULTS = 5
-    MAX_CONTENT_LENGTH = 8000
-    MAX_TOTAL_CONTEXT = 30000
-    SEARCH_TIMEOUT = 15
-    SCRAPE_TIMEOUT = 12
-    REQUEST_DELAY = 0.5
-```
-
-#### Ad Filtering
-
-Pre-compiled combined regex for single-pass matching:
-
-```python
-# Combined pattern matches any ad URL indicator in one pass
-AD_URL_COMBINED = re.compile(
-    "|".join(_AD_URL_PATTERN_STRINGS),  # ~14 patterns combined
-    re.IGNORECASE
-)
-
-def _is_ad(self, result: SearchResult, raw_url: str) -> bool:
-    # O(1) combined match instead of O(N) pattern loop
-    if self.config.AD_URL_COMBINED.search(url_to_check):
-        return True
-    if self.config.AD_TITLE_COMBINED.search(result.title):
-        return True
-    return False
-```
-
-#### Domain Quality Scoring
-
-```python
-# O(1) frozenset lookup
-HIGH_QUALITY_DOMAINS_EXACT = frozenset({
-    "wikipedia.org", "britannica.com", "reuters.com", ...
-})
-HIGH_QUALITY_SUFFIXES = (".gov", ".edu")  # Tuple for endswith()
-LOW_QUALITY_DOMAINS = frozenset({
-    "pinterest.com", "facebook.com", "reddit.com", ...
-})
-
-def _calculate_quality(self, result: SearchResult) -> float:
-    score = 0.5
-    domain = result.domain
-
-    # O(1) suffix check + O(1) set lookup
-    if domain.endswith(self.config.HIGH_QUALITY_SUFFIXES):
-        score += 0.5
-    elif domain in self.config.HIGH_QUALITY_DOMAINS_EXACT:
-        score += 0.3
-
-    if domain in self.config.LOW_QUALITY_DOMAINS:
-        score -= 0.2
-
-    return max(0.0, min(1.0, score))
-```
-
-#### WebTools Interface
-
-```python
-class WebTools:
-    def quick_search(self, query: str, max_results: int = 5) -> str:
-        """Snippets only, no scraping - fast."""
-
-    def search(self, query: str, max_sources: int = 5) -> str:
-        """Standard search with 5 sources scraped."""
-
-    def deep_search(self, query: str, max_sources: int = 10) -> str:
-        """Comprehensive with 10 sources."""
-```
-
----
-
 ## 4. API Layer
 
 ### 4.1 FastAPI Application
@@ -600,6 +518,8 @@ class ServiceContainer:
     stt: Optional["STTService"] = None
     tts: Optional["TTSService"] = None
     state: Optional["StateManager"] = None
+    dreaming: Optional["DreamingEngine"] = None
+    fact_extractor: Optional["HybridFactExtractor"] = None
 
     def get(self, name: str):
         """Dict-like access for backward compatibility."""
@@ -658,26 +578,27 @@ async def health_check():
 ```python
 @router.post("/chat")
 async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDep):
-    # 1. Detect search intent
-    search_q, search_mode = check_for_search(request.message)
+    # 1. Prefetch memory context (skipped for short/greeting messages,
+    #    hard-capped at 1.5s so a slow Chroma query can't stall startup)
+    mem_ctx = await _fetch_memory_context(memory, request.message)
 
-    # 2. Parallel fetch: memory + web search
-    mem_task = asyncio.create_task(_prefetch_memory(memory, request.message))
-
-    if search_q:
-        if search_mode == "deep":
-            results = web_search_deep(search_q)
-        elif search_mode == "quick":
-            results = web_search_quick(search_q)
-        else:
-            results = web_search(search_q)
-
-    # 3. Stream response or return JSON
+    # 2. Stream (SSE) or return JSON
     if request.stream:
         return StreamingResponse(gen_sse(), media_type="text/event-stream")
     else:
         return ChatResponse(message=full_resp, ...)
 ```
+
+During SSE streaming, completed sentences are pushed into a **session-scoped
+TTS queue** (owned by the service layer, not the request) as they arrive, so
+the first sentence plays while the LLM is still generating. Because the queue
+outlives the request, a client closing the SSE stream does not stop playback
+(Phase 1.1). After the stream finishes, the conversation is stored and queued
+for background LLM fact extraction via a fire-and-forget task.
+
+There is no web search or search-intent detection — the assistant is offline.
+
+`DELETE /api/history` clears the LLM conversation history.
 
 **SSE Format:**
 
@@ -696,88 +617,25 @@ _JSON_DONE = '{"token": "", "done": true}'
 _JSON_ERROR_TEMPLATE = '{{"error": {}, "done": true}}'
 ```
 
----
+#### Voice Endpoint (WebSocket /ws/voice)
 
-### 4.4 Chat Service
+**Location:** `src/api/routes/voice.py`
 
-**Location:** `src/api/services/chat_service.py`
+Full-duplex voice pipeline over a single WebSocket (Phase 1.3/1.4). The client
+streams raw 16 kHz mono PCM up and receives JSON control events (`speech_start`,
+`transcript_final`, `token`, `audio_start`/`audio_end`, `done`, `barge_in`)
+interleaved with binary TTS audio frames. Audio playback happens client-side, so
+the backend stays containerizable.
 
-Extracted business logic for testability:
+#### Other Routers
 
-```python
-class ChatService:
-    def __init__(self, llm: "LLMService", memory: "MemoryService", tts: Optional["TTSService"] = None):
-        self.llm = llm
-        self.memory = memory
-        self.tts = tts
-
-    def detect_search(self, message: str) -> SearchResult:
-        """Detect search intent with mode (quick/standard/deep)."""
-        txt = message.lower()
-
-        # Skip greetings (O(1) frozenset lookup)
-        if self._is_simple_greeting(txt):
-            return SearchResult(query=None, mode="")
-
-        # Check search patterns
-        for pat in SEARCH_PATTERNS_COMPILED:
-            m = pat.search(txt)
-            if m:
-                query = m.group(1).strip()
-                txt_words = set(txt.split())
-
-                # Multi-word phrase check + set intersection
-                if "in depth" in txt or txt_words & DEEP_SEARCH_WORDS:
-                    return SearchResult(query=query, mode="deep")
-                if txt_words & QUICK_SEARCH_WORDS:
-                    return SearchResult(query=query, mode="quick")
-                return SearchResult(query=query, mode="standard")
-
-    async def build_context(self, message: str, provided_context: Optional[str] = None):
-        """Build context with parallel search + memory fetch."""
-        # Skip search for short messages
-        word_count = len(message.split())
-        if word_count < 5:
-            search_result = SearchResult(query=None, mode="")
-        else:
-            search_result = self.detect_search(message)
-
-        # Parallel fetch
-        memory_task = asyncio.create_task(self.fetch_memory_context(message))
-
-        if search_result.query:
-            search_ctx = await self.execute_search(search_result.query, search_result.mode)
-
-        memory_ctx = await memory_task
-
-        return ChatContext(
-            search_context=search_ctx,
-            memory_context=memory_ctx,
-            provided_context=provided_context or "",
-        )
-```
-
-**CUDA Synchronization:**
-
-```python
-async def _sync_cuda(self) -> None:
-    """Sync CUDA before TTS to avoid GPU contention."""
-    if not _HAS_TORCH:
-        return
-
-    def _cuda_sync_and_clear():
-        """Combined CUDA ops - single executor call."""
-        _torch.cuda.synchronize()
-        _torch.cuda.empty_cache()
-
-    if _torch.cuda.is_available():
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _cuda_sync_and_clear)
-```
+- `src/api/routes/memory.py` — memory inspection/management endpoints (`/api/memory/*`)
+- `src/api/routes/settings.py` — runtime settings endpoints (`/api/settings/*`)
+- `src/api/routes/health.py` — `/health` liveness/readiness with rolling voice-pipeline latency metrics
 
 ---
 
-### 4.5 Configuration
+### 4.4 Configuration
 
 **Location:** `src/api/config.py`
 
@@ -839,7 +697,7 @@ def get_api_config() -> APIConfig:
 
 ---
 
-### 4.6 Constants
+### 4.5 Constants
 
 **Location:** `src/api/constants.py`
 
@@ -854,22 +712,15 @@ class Timeouts:
     STT_TRANSCRIBE: float = 30.0
     TTS_SYNTH_BASE: float = 20.0
 
-# Greeting patterns for O(1) lookup
+# Greeting patterns for O(1) lookup (short messages skip memory prefetch)
 GREETING_PATTERNS: FrozenSet[str] = frozenset([
     "hi", "hello", "hey", "thanks", "thank you"
 ])
 
-# Pre-compiled search detection patterns
-SEARCH_PATTERNS_COMPILED: List[Pattern] = [
-    re.compile(r"(?:can you |please )?search (?:for |the web for )?(.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"what (?:is|are|was|were) (.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"who (?:is|are|was|were) (.+?)(?:\?|$)", re.IGNORECASE),
-    # ... 7 total patterns
-]
-
-# Search mode keywords
-DEEP_SEARCH_WORDS: FrozenSet[str] = frozenset(["detailed", "comprehensive", "thorough"])
-QUICK_SEARCH_WORDS: FrozenSet[str] = frozenset(["quick", "briefly"])
+GREETING_REGEX: Pattern = re.compile(
+    r"^(hi|hello|hey|thanks|thank you)\s*[!?.]?$",
+    re.IGNORECASE
+)
 
 # Pre-built SSE templates (~5x faster than json.dumps per token)
 SSE_TOKEN_TEMPLATE: str = '{{"token": {}, "done": false}}'
@@ -1033,11 +884,20 @@ class Animation:
 
 ---
 
-## 6. Experimental Features
+## 6. Background Memory Systems
+
+Both systems below are production and wired into the FastAPI lifespan
+(`src/api/main.py`): the dreaming engine starts idle monitoring at startup and
+runs a final pass on shutdown, and the hybrid fact extractor's background worker
+starts at startup. They are tracked on the service container as
+`container.dreaming` and `container.fact_extractor`.
+
+The only module still under `src/experimental/` is
+`src/experimental/speech/wake_word_enhanced.py`, which is not yet wired in.
 
 ### 6.1 Dreaming Engine
 
-**Location:** `src/experimental/memory/dreaming.py`
+**Location:** `src/core/memory/dreaming.py`
 
 Memory consolidation during idle/shutdown:
 
@@ -1112,7 +972,7 @@ def _get_conversations(self, age_threshold_hours: int):
 
 ### 6.2 Fact Extractor
 
-**Location:** `src/experimental/memory/fact_extractor.py`
+**Location:** `src/core/memory/fact_extractor.py`
 
 Hybrid extraction using regex + LLM:
 
@@ -1174,7 +1034,9 @@ class LLMFactExtractor:
             time.sleep(self.config.batch_delay_seconds)
 ```
 
-**Status: NEEDS INTEGRATION** - Fully implemented but not wired to API.
+**Integration:** Wired into the FastAPI lifespan. The `/api/chat` handler queues
+each completed exchange for background LLM fact extraction via
+`container.fact_extractor.llm_extractor.queue_extraction(...)`.
 
 ---
 
@@ -1273,9 +1135,6 @@ tts:
 | API | Parallel startup | O(t1+t2) -> O(max(t1,t2)) |
 | API | Parallel shutdown | O(t1+t2) -> O(max(t1,t2)) |
 | API | Pre-built SSE templates | ~5x faster per token |
-| Search | Combined ad regex | Single-pass matching |
-| Search | frozenset domains | O(1) quality lookup |
-| Chat | CUDA combined ops | 2 executor calls -> 1 |
 | Dreaming | ChromaDB where clause | Server-side filtering |
 | Facts | Batch LLM extraction | Background queue |
 
@@ -1312,20 +1171,22 @@ tts:
 project-olivia/
 +-- src/
 |   +-- api/                      # FastAPI Backend
-|   |   +-- routes/               # Endpoints (chat.py, health.py)
-|   |   +-- services/             # Service wrappers
+|   |   +-- routes/               # chat.py, voice.py, memory.py, settings.py, health.py
+|   |   +-- services/             # Service wrappers (llm, memory, stt, tts,
+|   |   |                         #   tts_queue, audio_output, metrics, ...)
 |   |   +-- models/               # Pydantic schemas
-|   |   +-- utils/                # Utilities
-|   |   +-- main.py               # FastAPI app entry
+|   |   +-- utils/                # sentence_buffer, tts_sanitizer, audio_utils, ...
+|   |   +-- main.py               # FastAPI app entry + lifespan
 |   |   +-- config.py             # Configuration
 |   |   +-- container.py          # DI container
 |   |   +-- constants.py          # Centralized values
 |   |   +-- protocols.py          # Service interfaces
 |   |   +-- dependencies.py       # FastAPI dependencies
+|   |   +-- middleware.py         # Logging + error handling
 |   |
 |   +-- flet_app/                 # Desktop UI
 |   |   +-- components/           # UI components
-|   |   +-- services/             # API client, state
+|   |   +-- services/             # api_client, voice_client, state
 |   |   +-- main.py               # Flet entry point
 |   |   +-- app.py                # Main app class
 |   |   +-- theme.py              # Design system
@@ -1336,22 +1197,27 @@ project-olivia/
 |   |   +-- speech/               # STT/TTS
 |   |   |   +-- stt.py            # faster-whisper
 |   |   |   +-- chatterbox_tts.py # ChatterBox Turbo
-|   |   +-- memory/               # ChromaDB
-|   |   |   +-- smart_memory.py   # Three-tier system
-|   |   +-- tools/                # Web search
-|   |       +-- web_search.py     # Research engine
+|   |   |   +-- audio_processing.py
+|   |   +-- memory/               # ChromaDB + background memory systems
+|   |       +-- smart_memory.py   # Three-tier system
+|   |       +-- dreaming.py       # DreamingEngine
+|   |       +-- fact_extractor.py # HybridFactExtractor
 |   |
-|   +-- config/                   # Configuration
-|   +-- experimental/memory/      # Dreaming + Fact extraction
-|   |   +-- dreaming.py           # DreamingEngine
-|   |   +-- fact_extractor.py     # HybridFactExtractor
-|   +-- legacy/                   # Old CustomTkinter GUI
+|   +-- config/                   # Character config loader
+|   +-- utils/                    # Shared utilities (logger)
+|   +-- experimental/
+|       +-- speech/
+|           +-- wake_word_enhanced.py  # Not yet wired in
 |
 +-- config/
 |   +-- character.yaml            # Personality configuration
 |
++-- tools/                        # Data-gen, fine-tuning, benchmarking
+|   +-- bench.py, bench_compare.py
+|   +-- model_engineering/        # finetune, DPO, GGUF convert, merge/ kit
++-- benchmarks/results/           # Committed benchmark results
 +-- tests/                        # Test suite
-+-- docs/                         # Documentation
++-- docs/                         # Documentation (see MASTER_PLAN.md for roadmap)
 +-- data/                         # Runtime data (memory_db, logs)
 +-- assets/voice/                 # Voice reference files
 +-- run_olivia.py                 # Unified launcher
@@ -1380,12 +1246,12 @@ project-olivia/
 | Startup (to ready) | <10s | ~5s |
 | Personality consistency | >90% | ~85% |
 
-### Current Sprint
+### Status & Roadmap
 
-1. **Integrate experimental memory** - Wire DreamingEngine + HybridFactExtractor to API
-2. **Complete QLoRA fine-tuning** - Produce olivia-finetuned model
-3. **Memory API endpoints** - `/api/memory`
+Done: DreamingEngine + HybridFactExtractor are wired into the FastAPI lifespan,
+and the memory API endpoints (`/api/memory`) are live. Forward direction now
+lives in `docs/MASTER_PLAN.md`.
 
 ---
 
-*Documentation generated from codebase analysis on 2026-01-28*
+*Documentation generated from codebase analysis on 2026-01-28; audited against current code 2026-07-03.*

@@ -1,4 +1,4 @@
-"""Memory module - ChromaDB storage. Experimental stuff in src/experimental/memory/."""
+"""Memory module - ChromaDB storage plus background dreaming and fact extraction."""
 
 from .smart_memory import MemoryDB, SmartMemoryDB
 
