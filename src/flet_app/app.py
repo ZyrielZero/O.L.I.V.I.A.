@@ -15,6 +15,7 @@ from src.flet_app.components.settings_dialog import SettingsDialog
 from src.flet_app.components.status_indicator import StatusIndicator
 from src.flet_app.services.api_client import OliviaAPIClient
 from src.flet_app.services.state_manager import StateManager
+from src.flet_app.services.voice_client import VoiceClient
 from src.flet_app.theme import Theme
 
 log = logging.getLogger("flet.app")
@@ -49,6 +50,8 @@ class OliviaApp:
         self.settings_button = None
         self.settings_dialog = None
         self._is_recording = False
+        self._voice_client = None
+        self._voice_streaming = False  # assistant bubble open during voice reply
 
         # Build UI
         self.build()
@@ -273,28 +276,80 @@ class OliviaApp:
         self.state_manager.update(is_processing=False, status="ready")
         self.status_indicator.set_status("ready")
 
-    async def _toggle_voice(self, e=None):
-        """Toggle voice recording state."""
-        self._is_recording = not self._is_recording
+    def _voice_ws_url(self) -> str:
+        """Derive the /ws/voice URL from the API client's base URL."""
+        base = getattr(self.api_client, "base_url", "http://127.0.0.1:8000")
+        return base.replace("https://", "wss://").replace("http://", "ws://").rstrip("/") + "/ws/voice"
 
-        if self._is_recording:
-            # Start recording
+    async def _toggle_voice(self, e=None):
+        """Start/stop a live voice session over /ws/voice (Phase 1.5)."""
+        if not self._is_recording:
+            try:
+                self._voice_client = VoiceClient(self._voice_ws_url(), self._on_voice_event)
+                await self._voice_client.start()
+            except Exception as ex:
+                log.error(f"Voice session failed to start: {ex}")
+                self._voice_client = None
+                self._show_error_dialog(
+                    "Voice Unavailable",
+                    f"Could not start the voice session:\n\n{ex}",
+                )
+                return
+
+            self._is_recording = True
             self.mic_button.icon_control.color = Theme.colors.MIC_ACTIVE
             self.mic_button._icon_color = Theme.colors.MIC_ACTIVE
             self.mic_button.bgcolor = Theme.colors.BG_SURFACE_2
             self.status_indicator.set_status("recording")
             self.state_manager.update(is_recording=True, status="recording")
-            log.info("Voice recording started")
+            log.info("Voice session started")
         else:
-            # Stop recording
+            self._is_recording = False
+            if self._voice_client:
+                await self._voice_client.stop()
+                self._voice_client = None
+            if self._voice_streaming:
+                self.chat_display.end_streaming()
+                self._voice_streaming = False
             self.mic_button.icon_control.color = Theme.colors.MIC_INACTIVE
             self.mic_button._icon_color = Theme.colors.MIC_INACTIVE
             self.mic_button.bgcolor = Theme.colors.BG_SURFACE_1
             self.status_indicator.set_status("ready")
             self.state_manager.update(is_recording=False, status="ready")
-            log.info("Voice recording stopped")
+            log.info("Voice session stopped")
 
         self.mic_button.update()
+
+    async def _on_voice_event(self, event: dict):
+        """Drive UI state from /ws/voice control events."""
+        kind = event.get("type")
+
+        if kind == "speech_start":
+            self.status_indicator.set_status("recording")
+        elif kind == "transcript_final":
+            self.chat_display.append_message("You", event.get("text", ""))
+            self.chat_display.start_streaming("O.L.I.V.I.A.")
+            self._voice_streaming = True
+            self.status_indicator.set_status("processing")
+        elif kind == "token":
+            if self._voice_streaming:
+                self.chat_display.append_token(event.get("text", ""))
+        elif kind == "audio_start":
+            self.status_indicator.set_status("processing")
+            self.state_manager.update(status="speaking")
+        elif kind in ("done", "barge_in"):
+            if self._voice_streaming:
+                self.chat_display.end_streaming()
+                self._voice_streaming = False
+            if self._is_recording:
+                self.status_indicator.set_status("recording")
+        elif kind == "error":
+            log.error(f"Voice error: {event.get('message')}")
+            if self._voice_streaming:
+                self.chat_display.end_streaming()
+                self._voice_streaming = False
+            self.status_indicator.set_status("error")
+        self.page.update()
 
     async def _open_settings(self, e=None):
         """Open settings dialog."""
@@ -346,6 +401,12 @@ class OliviaApp:
 
     async def _cleanup(self):
         """Clean up resources before exit."""
+        if self._voice_client:
+            try:
+                await self._voice_client.stop()
+            except Exception as e:
+                log.warning(f"Voice cleanup error: {e}")
+            self._voice_client = None
         try:
             await self.api_client.close()
             log.info("API client closed")

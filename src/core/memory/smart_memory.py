@@ -407,8 +407,11 @@ class SmartMemoryDB:
         """
 
         def search_facts():
-            if self.facts.count() > 0:
-                fact_results = self.facts.query(query_texts=[query], n_results=2)
+            count = self.facts.count()
+            if count > 0:
+                # n_results > element count makes hnswlib fail intermittently
+                # on small indexes ("contiguous 2D array") — clamp it
+                fact_results = self.facts.query(query_texts=[query], n_results=min(2, count))
                 if fact_results:
                     docs = fact_results.get("documents")
                     if docs and docs[0]:
@@ -416,8 +419,11 @@ class SmartMemoryDB:
             return []
 
         def search_conversations():
-            if self.conversations.count() > 0:
-                conv_results = self.conversations.query(query_texts=[query], n_results=n_results)
+            count = self.conversations.count()
+            if count > 0:
+                conv_results = self.conversations.query(
+                    query_texts=[query], n_results=min(n_results, count)
+                )
                 if conv_results:
                     docs = conv_results.get("documents")
                     if docs and docs[0]:
@@ -425,8 +431,11 @@ class SmartMemoryDB:
             return []
 
         def search_summaries():
-            if self.summaries.count() > 0:
-                summary_results = self.summaries.query(query_texts=[query], n_results=2)
+            count = self.summaries.count()
+            if count > 0:
+                summary_results = self.summaries.query(
+                    query_texts=[query], n_results=min(2, count)
+                )
                 if summary_results:
                     docs = summary_results.get("documents")
                     if docs and docs[0]:
