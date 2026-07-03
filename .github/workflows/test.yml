@@ -109,9 +109,14 @@ jobs:
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[dev]"
 
-      # Triaged 2026-07-02. Ignored (deferred, not dismissed):
-      # transformers 4.57.6 — fixes require the 5.x major bump, which must be
-      # validated against ChatterBox TTS on real hardware first.
+      # Triaged 2026-07-03. Ignored (each deferred or not applicable, not dismissed):
+      # - transformers 4.57.6 (PYSEC-2025-217, CVE-2026-1839, CVE-2026-4372):
+      #   fixes require the 5.x major bump, which must be validated against
+      #   ChatterBox TTS on real hardware first
+      # - chromadb PYSEC-2026-311: pre-auth code injection in the Chroma HTTP
+      #   server API; OLIVIA embeds chromadb via PersistentClient and never
+      #   runs that server, so the vulnerable surface is absent (no fix
+      #   version released yet — re-check when one lands)
       # --strict is off because +cpu/+cu torch wheels aren't on PyPI and can't
       # be audited; real findings still fail the job.
       - name: Audit dependencies
@@ -120,3 +125,4 @@ jobs:
           --ignore-vuln PYSEC-2025-217
           --ignore-vuln CVE-2026-1839
           --ignore-vuln CVE-2026-4372
+          --ignore-vuln PYSEC-2026-311
