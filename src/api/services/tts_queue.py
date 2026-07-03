@@ -2,8 +2,11 @@
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional, Tuple
+
+from src.api.services.metrics import get_metrics
 
 log = logging.getLogger("api.tts_queue")
 
@@ -59,6 +62,16 @@ class SentenceTTSQueue:
         self._stopped = False
         self._synth_task = asyncio.create_task(self._synth_loop())
         self._play_task = asyncio.create_task(self._play_loop())
+
+    def is_running(self) -> bool:
+        """True while both workers are alive and the queue accepts sentences."""
+        return bool(
+            not self._stopped
+            and self._synth_task
+            and not self._synth_task.done()
+            and self._play_task
+            and not self._play_task.done()
+        )
 
     async def stop(self) -> None:
         """Stop immediately, cancelling workers and discarding pending work."""
@@ -116,9 +129,11 @@ class SentenceTTSQueue:
                 try:
                     word_count = sent.count(" ") + 1
                     timeout = self.cfg.synth_timeout + word_count * _WORDS_PER_SECOND_FACTOR
+                    start = time.perf_counter()
                     audio = await asyncio.wait_for(self.synthesize_fn(sent), timeout=timeout)
+                    get_metrics().record("tts_ttfb_ms", (time.perf_counter() - start) * 1000)
                     self._n_synth += 1
-                    if audio:
+                    if audio is not None and len(audio) > 0:
                         await self._audio_q.put((sent, audio))
                 except asyncio.TimeoutError:
                     log.error(f"Synth timeout: {sent[:30]}...")

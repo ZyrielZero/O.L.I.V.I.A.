@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime
 from typing import AsyncGenerator
 
@@ -11,7 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.dependencies import LLMServiceDep, MemoryServiceDep, get_service
 from src.api.models.chat import ChatRequest, ChatResponse
-from src.api.services.tts_queue import SentenceTTSQueue
+from src.api.services.metrics import get_metrics
 from src.api.utils.sentence_buffer import SentenceBuffer
 from src.api.utils.tts_sanitizer import sanitize_for_tts
 
@@ -104,20 +105,24 @@ async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDe
             async def gen_sse() -> AsyncGenerator[str, None]:
                 """SSE stream with concurrent TTS synthesis.
 
-                TTS queue starts before the LLM loop — sentences are fed to TTS
-                as they complete, so the first sentence plays while the LLM is
-                still generating the rest.
+                Sentences are fed into the SESSION-scoped TTS queue (owned by
+                the service layer, not this request) as they complete — the
+                first sentence plays while the LLM is still generating, and a
+                client closing the SSE stream cannot kill playback (Phase 1.1).
                 """
                 resp_chunks: list[str] = []
                 sent_buf = SentenceBuffer()
                 tts = get_service("tts")
 
-                # Start TTS queue upfront so sentences stream in during LLM generation
                 tts_q = None
                 if tts and tts.is_initialized():
-                    tts_q = SentenceTTSQueue(tts.synthesize_f32, tts.play_f32)
-                    await tts_q.start()
+                    # Lazy import: tts_service pulls torch/ChatterBox
+                    from src.api.services.tts_service import get_session_tts_queue
 
+                    tts_q = await get_session_tts_queue(tts)
+
+                llm_start = time.perf_counter()
+                first_token_at = None
                 try:
                     async for tok in llm.chat_stream(
                         message=request.message,
@@ -125,6 +130,11 @@ async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDe
                         temperature=request.temperature,
                         max_tokens=request.max_tokens,
                     ):
+                        if first_token_at is None:
+                            first_token_at = time.perf_counter()
+                            get_metrics().record(
+                                "llm_ttft_ms", (first_token_at - llm_start) * 1000
+                            )
                         resp_chunks.append(tok)
                         yield f"data: {_JSON_TOKEN_TEMPLATE.format(json.dumps(tok))}\n\n"
 
@@ -154,19 +164,13 @@ async def chat(request: ChatRequest, llm: LLMServiceDep, memory: MemoryServiceDe
                                 tts_q = None
 
                     full_resp = "".join(resp_chunks)
+                    get_metrics().record("llm_total_ms", (time.perf_counter() - llm_start) * 1000)
 
                     _create_bg_task(_store_conversation(memory, request.message, full_resp))
 
-                    # UI gets done signal immediately — TTS continues playing in background
+                    # Done signal goes out immediately; the session TTS queue
+                    # keeps playing on its own — no finish() barrier here
                     yield f"data: {_JSON_DONE}\n\n"
-
-                    # Wait for TTS to finish (keeps StreamingResponse alive)
-                    if tts_q:
-                        try:
-                            await tts_q.finish()
-                        except Exception as e:
-                            log.error(f"TTS finish error: {e}")
-                            await tts_q.stop()
 
                 except Exception as e:
                     log.error(f"Stream error: {e}")

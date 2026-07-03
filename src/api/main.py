@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.config import APIConfig
 from src.api.container import get_container
 from src.api.middleware import ErrorHandlingMiddleware, LoggingMiddleware
-from src.api.routes import chat, health
+from src.api.routes import chat, health, voice
 
 _LOG_FMT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -269,6 +269,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.warning(f"Shutdown dreaming failed: {e}")
 
+    # Stop the session TTS queue and release the audio device
+    try:
+        from src.api.services.audio_output import close_audio_output
+        from src.api.services.tts_service import get_active_tts_queue
+
+        q = get_active_tts_queue()
+        if q:
+            await q.stop()
+        close_audio_output()
+    except Exception as e:
+        log.warning(f"Audio pipeline cleanup failed: {e}")
+
     # OPT: Parallel cleanup for independent services
     async def _cleanup_tts():
         if container.tts and container.tts.is_initialized():
@@ -321,6 +333,7 @@ app.add_middleware(ErrorHandlingMiddleware)
 
 app.include_router(health.router)
 app.include_router(chat.router)
+app.include_router(voice.router)
 
 
 @app.get("/")

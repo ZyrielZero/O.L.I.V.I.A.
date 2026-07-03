@@ -120,11 +120,14 @@ class TestTTSStreamingOptimization:
 
         service._engine_speaker_mode = mock_engine
 
-        with patch("src.api.services.tts_service.sd"):
-            # Should complete without issues
+        # Playback goes through the persistent AudioOutput now (Phase 1.2)
+        mock_out = MagicMock()
+        mock_out.wait_drained = MagicMock(return_value=True)
+        with patch("src.api.services.audio_output.get_audio_output", return_value=mock_out):
             await service.speak("Hello world")
 
         mock_engine.synthesize_to_numpy.assert_called_once()
+        mock_out.write.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_speak_empty_text_skipped(self):

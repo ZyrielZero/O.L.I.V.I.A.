@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from src.api.services.tts_queue import SentenceTTSQueue
 
 import numpy as np
-import sounddevice as sd
 
 from src.api.utils.exceptions import ServiceInitializationError, SynthesisError
 from src.core.speech.chatterbox_tts import ChatterBoxConfig, ChatterBoxEngine
@@ -43,10 +42,36 @@ def get_active_tts_queue():
 
 
 async def barge_in():
-    """Stop active TTS playback (called when user starts speaking)."""
+    """Stop active TTS playback (called when user starts speaking).
+
+    Cancels pending synthesis AND drops audio already queued on the device.
+    """
     q = get_active_tts_queue()
     if q:
         await q.stop()
+    from src.api.services.audio_output import _output  # current instance, if any
+
+    if _output is not None:
+        _output.flush()
+
+
+async def get_session_tts_queue(tts: "TTSService") -> "SentenceTTSQueue":
+    """Long-lived TTS queue owned by the service layer, not the request.
+
+    The route feeds sentences and returns; a client closing its SSE stream
+    no longer cancels playback mid-sentence (Phase 1.1). Recreated on demand
+    after a barge-in/stop killed the workers.
+    """
+    from src.api.services.tts_queue import SentenceTTSQueue
+
+    q = get_active_tts_queue()
+    if q is not None and q.is_running():
+        return q
+
+    q = SentenceTTSQueue(tts.synthesize_f32, tts.play_f32)
+    await q.start()
+    set_active_tts_queue(q)
+    return q
 
 
 class TTSService:
@@ -158,40 +183,39 @@ class TTSService:
             return np.concatenate(chunks) if chunks else np.array([], dtype=_FLOAT32_DTYPE)
 
     async def play_audio(self, audio: bytes) -> None:
-        """Play PCM audio."""
+        """Play PCM (16-bit LE) audio via the persistent output stream."""
         if not audio:
             return
-
-        loop = asyncio.get_event_loop()
-        sample_rate = self.config.sample_rate
-
-        def _play():
-            try:
-                arr = np.frombuffer(audio, dtype=_INT16_DTYPE).astype(_FLOAT32_DTYPE)
-                arr /= _INT16_MAX
-                sd.play(arr, samplerate=sample_rate)
-                sd.wait()
-            except Exception:
-                log.error("Playback error", exc_info=True)
-
-        await loop.run_in_executor(None, _play)
+        arr = np.frombuffer(audio, dtype=_INT16_DTYPE).astype(_FLOAT32_DTYPE)
+        arr /= _INT16_MAX
+        await self.play_f32(arr)
 
     async def play_f32(self, audio: np.ndarray) -> None:
-        """Play float32 ndarray directly — no conversion needed."""
+        """Play float32 audio via the persistent output stream (Phase 1.2).
+
+        One long-lived OutputStream + ring buffer replaces per-sentence
+        sd.play()/sd.wait() — no device reopen, no inter-sentence clicks.
+        Returns once this audio has been handed to the device.
+        """
         if audio is None or len(audio) == 0:
             return
 
+        from src.api.services.audio_output import get_audio_output
+
         loop = asyncio.get_event_loop()
-        sample_rate = self.config.sample_rate
+        out = get_audio_output(self.config.sample_rate)
+        out.write(audio)
 
-        def _play():
+        # Audio duration + generous margin; barge-in flush() releases early
+        timeout = len(audio) / self.config.sample_rate + 30.0
+
+        def _wait():
             try:
-                sd.play(audio, samplerate=sample_rate)
-                sd.wait()
+                out.wait_drained(timeout=timeout)
             except Exception:
-                log.error("Playback error", exc_info=True)
+                log.error("Playback wait error", exc_info=True)
 
-        await loop.run_in_executor(None, _play)
+        await loop.run_in_executor(None, _wait)
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
         """Stream audio chunks (16-bit PCM LE)."""
