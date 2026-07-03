@@ -65,9 +65,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ZyrielZero/project-olivia"
-Documentation = "https://github.com/ZyrielZero/project-olivia/tree/main/docs"
-Repository = "https://github.com/ZyrielZero/project-olivia"
+Homepage = "https://github.com/ZyrielZero/O.L.I.V.I.A."
+Documentation = "https://github.com/ZyrielZero/O.L.I.V.I.A./tree/main/docs"
+Repository = "https://github.com/ZyrielZero/O.L.I.V.I.A."
 
 [project.optional-dependencies]
 dev = [

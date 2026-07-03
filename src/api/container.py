@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from src.api.services.state_manager import StateManager
     from src.api.services.stt_service import STTService
     from src.api.services.tts_service import TTSService
-    from src.experimental.memory.dreaming import DreamingEngine
-    from src.experimental.memory.fact_extractor import HybridFactExtractor
+    from src.core.memory.dreaming import DreamingEngine
+    from src.core.memory.fact_extractor import HybridFactExtractor
 
 
 @dataclass

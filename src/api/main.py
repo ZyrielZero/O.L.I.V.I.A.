@@ -190,16 +190,10 @@ async def lifespan(app: FastAPI):
         container.state = StateManager()
         log.info("State manager ready")
 
-        # Web search - lightweight, no model loading
-        from src.core.tools.web_search import get_web_tools
-
-        get_web_tools()
-        log.info("Web search ready")
-
-        # ===== Experimental memory integration =====
+        # ===== Background memory systems (dreaming + fact extraction) =====
         try:
-            from src.experimental.memory.dreaming import DreamConfig, create_dreaming_engine
-            from src.experimental.memory.fact_extractor import create_fact_extractor
+            from src.core.memory.dreaming import DreamConfig, create_dreaming_engine
+            from src.core.memory.fact_extractor import create_fact_extractor
 
             dream_cfg = DreamConfig(max_conversations_per_dream=10)
             dreaming = create_dreaming_engine(mem_svc._db, dream_cfg)
@@ -212,7 +206,7 @@ async def lifespan(app: FastAPI):
             container.fact_extractor = extractor
             log.info("HybridFactExtractor ready (background worker started)")
         except Exception as e:
-            log.warning(f"Experimental memory integration failed: {e}")
+            log.warning(f"Background memory integration failed: {e}")
 
         log.info("=" * 60)
         log.info(f"  O.L.I.V.I.A. Ready @ {cfg.HOST}:{cfg.PORT}")
@@ -253,7 +247,7 @@ async def lifespan(app: FastAPI):
 
     container = get_container()
 
-    # Stop experimental systems first (they use Ollama/memory)
+    # Stop background memory systems first (they use Ollama/memory)
     if container.fact_extractor:
         try:
             container.fact_extractor.stop()

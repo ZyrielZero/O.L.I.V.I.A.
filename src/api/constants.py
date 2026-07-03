@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass
-from typing import FrozenSet, List, Pattern
+from typing import FrozenSet, Pattern
 
 # =============================================================================
 # TIMEOUTS (seconds)
@@ -36,26 +36,6 @@ TIMEOUTS = Timeouts()
 
 
 # =============================================================================
-# WEB SEARCH CONFIG
-# =============================================================================
-
-@dataclass(frozen=True)
-class WebSearchConfig:
-    """Web search configuration constants."""
-
-    MAX_RESULTS: int = 10
-    MAX_SCRAPE_RESULTS: int = 5
-    MAX_CONTENT_LENGTH: int = 8000
-    MAX_TOTAL_CONTEXT: int = 30000
-    SEARCH_TIMEOUT: int = 15
-    SCRAPE_TIMEOUT: int = 12
-    REQUEST_DELAY: float = 0.5
-
-
-WEB_SEARCH = WebSearchConfig()
-
-
-# =============================================================================
 # CHAT PATTERNS
 # =============================================================================
 
@@ -69,21 +49,6 @@ GREETING_REGEX: Pattern = re.compile(
     r"^(hi|hello|hey|thanks|thank you)\s*[!?.]?$",
     re.IGNORECASE
 )
-
-# Pre-compiled search detection patterns
-SEARCH_PATTERNS_COMPILED: List[Pattern] = [
-    re.compile(r"(?:can you |please )?search (?:for |the web for )?(.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"(?:can you |please )?look up (.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"what (?:is|are|was|were) (.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"who (?:is|are|was|were) (.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"when (?:is|are|was|were|did) (.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"where (?:is|are|was|were|can) (.+?)(?:\?|$)", re.IGNORECASE),
-    re.compile(r"how (?:do|does|did|can|to) (.+?)(?:\?|$)", re.IGNORECASE),
-]
-
-# Search mode keywords
-DEEP_SEARCH_WORDS: FrozenSet[str] = frozenset(["detailed", "comprehensive", "thorough"])
-QUICK_SEARCH_WORDS: FrozenSet[str] = frozenset(["quick", "briefly"])
 
 
 # =============================================================================
@@ -109,7 +74,6 @@ class ServiceKey:
     STT: str = "stt"
     TTS: str = "tts"
     STATE: str = "state"
-    WEB: str = "web"
 
 
 # =============================================================================

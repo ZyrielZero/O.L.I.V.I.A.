@@ -179,7 +179,7 @@ async def test_lifespan_wires_memory_maintenance(monkeypatch):
         raise RuntimeError("disabled in test")
 
     monkeypatch.setattr(
-        "src.experimental.memory.dreaming.create_dreaming_engine", _no_dreaming
+        "src.core.memory.dreaming.create_dreaming_engine", _no_dreaming
     )
 
     reset_container()
