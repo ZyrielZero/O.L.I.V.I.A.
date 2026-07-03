@@ -1,5 +1,8 @@
-# O.L.I.V.I.A. runtime dependencies — Windows + NVIDIA CUDA 12.6
-# NOT portable to Linux/CI as-is (+cu126 wheels come from the PyTorch index below).
+# O.L.I.V.I.A. runtime dependencies — Windows + NVIDIA CUDA 12.8
+# cu128 is required for Blackwell GPUs (RTX 50xx, sm_120) and still covers
+# Ada/Ampere cards; cu126 wheels have no sm_120 kernels and fail at runtime
+# with "no kernel image is available for execution on the device".
+# NOT portable to Linux/CI as-is (+cu128 wheels come from the PyTorch index below).
 # CI installs `.[dev]` from pyproject.toml instead.
 # requirements.lock holds the full frozen transitive set for exact reproduction.
 #
@@ -13,11 +16,11 @@
 # package itself must be installed with --no-deps. `pip check` will therefore
 # report chatterbox-tts complaints (torch/transformers versions; gradio and
 # other demo-only extras "missing") — these are known and harmless.
---extra-index-url https://download.pytorch.org/whl/cu126
+--extra-index-url https://download.pytorch.org/whl/cu128
 
 # GPU stack
-torch==2.10.0+cu126
-torchaudio==2.10.0+cu126
+torch==2.10.0+cu128
+torchaudio==2.10.0+cu128
 
 # Core LLM
 ollama==0.6.1
@@ -58,8 +61,8 @@ beautifulsoup4==4.14.3
 trafilatura==2.0.0
 
 # FastAPI backend
-fastapi==0.128.0
-starlette==0.50.0
+fastapi==0.139.0
+starlette==1.3.1  # >=1.3.1 fixes PYSEC-2026-161/248/249, CVE-2026-48817/48818
 uvicorn[standard]==0.40.0
 pydantic==2.11.10
 pydantic-settings==2.12.0
