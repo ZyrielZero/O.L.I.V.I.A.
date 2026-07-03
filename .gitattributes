@@ -3,6 +3,7 @@
 
 # Explicit text types
 *.py text
+*.sh text eol=lf
 *.md text
 *.yml text
 *.yaml text

@@ -28,6 +28,11 @@ outputs/*.wav
 # Generated artifacts
 evaluation_results.json
 
+# Model-merge experiment kit — outputs and kit-local venv
+# (results/ stays tracked: eval JSONs are the experiment's record)
+tools/model_engineering/merge/out/
+.venv-merge/
+
 # Virtual Environment
 .venv/
 venv/

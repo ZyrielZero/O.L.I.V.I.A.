@@ -1,0 +1,31 @@
+# =============================================================================
+# O.L.I.V.I.A. SLERP Control Merge
+# Control arm for the DARE-TIES experiment: the gentlest possible 2-model
+# merge (Stheno x Hermes). Isolates whether damage comes from technique or
+# donors — and if this beats the 3-model DARE-TIES merge on the eval gate,
+# the extra donor is not paying its way.
+#
+# Usage (inside WSL2, from tools/model_engineering/merge/):
+#   ./run_merge.sh olivia_slerp_control.yaml
+#
+# NOTE: if the installed mergekit rejects the `models:` shorthand for slerp,
+# use the classic `slices:` form documented in README.md (32-layer
+# layer_range for Llama-3.1-8B). Everything else stays the same.
+# =============================================================================
+
+merge_method: slerp
+dtype: bfloat16
+
+# ROLEPLAY CORE as the base / t=0 endpoint
+base_model: Sao10K/Llama-3.1-8B-Stheno-v3.4
+
+tokenizer_source: base
+
+models:
+  - model: Sao10K/Llama-3.1-8B-Stheno-v3.4
+  - model: NousResearch/Hermes-3-Llama-3.1-8B
+
+parameters:
+  # Interpolation factor: 0.0 = pure Stheno, 1.0 = pure Hermes.
+  # 0.35 keeps the personality core dominant, pulls in instruction following.
+  t: 0.35
