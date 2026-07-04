@@ -52,6 +52,7 @@ def create_slide_animation(duration_ms: int = None) -> ft.Animation:
 
 class PulseAnimator:
     """Manages a continuous pulsing/breathing animation for a control.
+
     Uses scale and opacity to create a breathing effect.
     """
 

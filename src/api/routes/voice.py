@@ -78,6 +78,7 @@ class VoiceSession:
     # -- lifecycle -------------------------------------------------------------
 
     async def run(self) -> None:
+        """Load VAD, then route incoming frames until the client disconnects."""
         from src.core.speech.stt import _get_silero_vad
 
         loop = asyncio.get_running_loop()
@@ -94,6 +95,7 @@ class VoiceSession:
                 await self._on_control(text)
 
     async def close(self) -> None:
+        """Cancel any in-flight response task."""
         await self._cancel_response()
 
     # -- inbound ---------------------------------------------------------------

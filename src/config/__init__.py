@@ -1,4 +1,5 @@
-"""Configuration Module
+"""Configuration module.
+
 Handles character configuration, settings, and theming.
 """
 

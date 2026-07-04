@@ -1,4 +1,5 @@
 """Enhanced Wake Word Detection for O.L.I.V.I.A.
+
 Uses openWakeWord with "hey_jarvis" as proxy for "Hey Olivia".
 """
 

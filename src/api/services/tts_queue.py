@@ -182,8 +182,10 @@ class SentenceTTSQueue:
 
     @property
     def pending_sentences(self) -> int:
+        """Number of sentences awaiting synthesis."""
         return self._sent_q.qsize()
 
     @property
     def pending_audio(self) -> int:
+        """Number of audio chunks awaiting playback."""
         return self._audio_q.qsize()

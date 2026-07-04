@@ -299,9 +299,11 @@ class TTSService:
         await self.play_f32(audio)
 
     async def health_check(self) -> bool:
+        """Check that the speaker-mode engine is loaded."""
         return self._engine_speaker_mode is not None and self._engine_speaker_mode._loaded
 
     def is_initialized(self) -> bool:
+        """Return True if the speaker-mode engine is loaded."""
         return self._engine_speaker_mode is not None and self._engine_speaker_mode._loaded
 
     async def get_status(self) -> dict:

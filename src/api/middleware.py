@@ -16,6 +16,7 @@ class LoggingMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        """Log method/path/status with timing around the wrapped app."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -46,6 +47,7 @@ class ErrorHandlingMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        """Run the wrapped app, returning a 500 JSON response on unhandled errors."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return

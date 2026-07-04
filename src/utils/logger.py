@@ -191,6 +191,7 @@ class ColoredFormatter(logging.Formatter):
         return self._component_cache[name]
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format a record with level and component colors, or empty string if the component is disabled."""
         level_color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
         component = self._get_component(record.name)
 
@@ -218,6 +219,7 @@ class FileFormatter(logging.Formatter):
         return self._component_cache[name]
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format a record as a pipe-delimited line for file output."""
         timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         component = self._get_component(record.name)
         return (
@@ -241,6 +243,7 @@ class ComponentFilter(logging.Filter):
         return self._component_cache[name]
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Pass the record only if its component is enabled."""
         component = self._get_component(record.name)
         return DebugConfig.is_component_enabled(component)
 
@@ -253,6 +256,7 @@ class OliviaLogger:
     MAX_LOG_FILES = 10
 
     def __new__(cls):
+        """Return the singleton instance, creating it on first call."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance

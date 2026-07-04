@@ -32,23 +32,28 @@ class StateManager:
         return sess
 
     async def get_session(self, sid: str) -> Optional[Session]:
+        """Look up a session by ID."""
         return self._sessions.get(sid)
 
     async def update_session_state(self, sid: str, state: str):
+        """Set session state and refresh last activity."""
         if sess := self._sessions.get(sid):
             sess.state = state
             sess.last_activity = datetime.now()
 
     async def append_to_audio_buffer(self, sid: str, data: bytes):
+        """Append audio bytes to the session buffer."""
         if sess := self._sessions.get(sid):
             sess.audio_buffer.extend(data)
             sess.last_activity = datetime.now()
 
     async def clear_audio_buffer(self, sid: str):
+        """Clear the session's audio buffer."""
         if sess := self._sessions.get(sid):
             sess.audio_buffer.clear()
 
     async def cleanup_session(self, sid: str):
+        """Remove a session."""
         self._sessions.pop(sid, None)
 
     async def cleanup_stale_sessions(self, timeout_seconds: int = 3600):
@@ -63,7 +68,9 @@ class StateManager:
             await self.cleanup_session(s)
 
     def get_active_sessions(self) -> int:
+        """Return the number of active sessions."""
         return len(self._sessions)
 
     def get_all_session_ids(self) -> List[str]:
+        """Return all active session IDs."""
         return list(self._sessions.keys())

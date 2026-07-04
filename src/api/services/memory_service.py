@@ -197,4 +197,5 @@ class MemoryService:
             return False
 
     def is_initialized(self) -> bool:
+        """Return True if the database is ready."""
         return self._db is not None

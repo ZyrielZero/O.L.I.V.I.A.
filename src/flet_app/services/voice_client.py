@@ -38,6 +38,7 @@ class VoiceClient:
 
     @property
     def is_running(self) -> bool:
+        """Whether the voice session is currently active."""
         return self._running
 
     async def start(self) -> None:

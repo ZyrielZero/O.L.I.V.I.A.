@@ -49,24 +49,29 @@ class LLMService:
             raise LLMError(str(e))
 
     async def clear_history(self):
+        """Clear conversation history."""
         if self._manager:
             self._manager.clear_history()
 
     async def update_system_prompt(self, prompt: str):
+        """Update the system prompt."""
         if self._manager:
             self._manager.update_system_prompt(prompt)
             self.system_prompt = prompt
 
     async def health_check(self) -> bool:
+        """Check Ollama connectivity."""
         try:
             return await check_ollama_connection_async(self.host)
         except Exception:
             return False
 
     def is_initialized(self) -> bool:
+        """Return True if the conversation manager is ready."""
         return self._manager is not None
 
     async def cleanup(self):
+        """Close the conversation manager."""
         if self._manager:
             await self._manager.close()
             log.info("LLM cleaned up")

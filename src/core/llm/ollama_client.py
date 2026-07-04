@@ -73,9 +73,11 @@ class ConversationManager:
         self.history = [{"role": "system", "content": self.system_prompt}]
 
     def clear_history(self):
+        """Reset history to just the system prompt."""
         self._reset_history()
 
     def update_system_prompt(self, prompt: str):
+        """Replace the system prompt in place, updating existing history."""
         self.system_prompt = prompt
         if self.history and self.history[0]["role"] == "system":
             self.history[0]["content"] = prompt
@@ -174,6 +176,7 @@ class ConversationManager:
             raise
 
     async def close(self):
+        """Close the underlying HTTP client."""
         await self._client.aclose()
 
 

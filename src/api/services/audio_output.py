@@ -84,6 +84,7 @@ class AudioOutput:
 
     @property
     def pending_samples(self) -> int:
+        """Number of queued samples not yet handed to the device."""
         with self._lock:
             total = sum(len(c) for c in self._chunks)
             return max(0, total - self._offset)

@@ -1,4 +1,5 @@
 """ChatterBox Turbo TTS Engine for O.L.I.V.I.A.
+
 Zero-shot voice cloning with streaming support and sub-500ms latency.
 """
 
@@ -189,6 +190,7 @@ class AudioPlayer:
         self._playing = False
 
     def is_playing(self) -> bool:
+        """Return True if audio playback is active."""
         return self._playing
 
 
@@ -405,6 +407,7 @@ class ChatterBoxEngine:
 
     def speak(self, text: str) -> None:
         """Synthesize and play speech with streaming.
+
         Non-blocking - returns immediately.
         """
         if not self._loaded:

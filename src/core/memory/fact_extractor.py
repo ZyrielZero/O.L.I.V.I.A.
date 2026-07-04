@@ -1,4 +1,5 @@
-"""LLM-Based Fact Extraction for O.L.I.V.I.A.
+"""LLM-based fact extraction for O.L.I.V.I.A.
+
 Background extraction using LLM with regex fallback.
 
 Performance Optimizations:
@@ -597,12 +598,15 @@ if __name__ == "__main__":
         """Minimal SmartMemory stand-in for the regex smoke test."""
 
         def is_duplicate_fact(self, f):
+            """Always report the fact as new."""
             return False
 
         def batch_check_duplicates(self, facts):
+            """Report every fact as new."""
             return [False] * len(facts)
 
         def add_fact(self, f, c):
+            """Print the fact instead of storing it."""
             print(f"  [{c}] {f}")
 
     extractor = HybridFactExtractor(MockMemory())

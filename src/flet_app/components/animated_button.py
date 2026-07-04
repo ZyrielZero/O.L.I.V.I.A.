@@ -75,6 +75,7 @@ class AnimatedSendButton(ft.Container):
                 self.on_click_handler(e)
 
     def set_loading(self, loading: bool):
+        """Toggle loading state, dimming the button and swapping the icon."""
         self.is_loading = loading
         self.opacity = 0.7 if loading else 1.0
         self.icon_control.name = ft.Icons.HOURGLASS_EMPTY if loading else ft.Icons.SEND_ROUNDED

@@ -1,4 +1,5 @@
 """Speech-to-Text Module for O.L.I.V.I.A.
+
 Whisper-based STT with push-to-talk and continuous listening modes.
 """
 

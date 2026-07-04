@@ -1,4 +1,5 @@
-"""Smart Memory System (Option C)
+"""Smart Memory System (Option C).
+
 Hybrid approach with Facts, Recent, and Relevant tiers.
 
 Performance Optimizations:
@@ -687,6 +688,7 @@ class MemoryDB(SmartMemoryDB):
     def add_memory(
         self, text: str, source: str = "user_chat", metadata: Optional[dict] = None
     ) -> None:
+        """Store a legacy memory string, splitting "User:/AI:" pairs into a conversation."""
         if "User:" in text and "AI:" in text:
             parts = text.split("AI:")
             if len(parts) == 2:
@@ -697,7 +699,9 @@ class MemoryDB(SmartMemoryDB):
         self.add_conversation(text, "", auto_extract_facts=False)
 
     def search_memory(self, query: str, n_results: int = 3) -> str:
+        """Legacy alias for search_all()."""
         return self.search_all(query, n_results)
 
     def get_memory_count(self) -> int:
+        """Return the total number of stored memories."""
         return self.get_stats()["total"]

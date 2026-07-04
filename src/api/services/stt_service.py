@@ -116,7 +116,9 @@ class STTService:
             raise TranscriptionError(f"Transcription timed out after {_TRANSCRIBE_TIMEOUT_S}s")
 
     async def health_check(self) -> bool:
+        """Check that the engine and model are loaded."""
         return self._engine is not None and self._engine.model is not None
 
     def is_initialized(self) -> bool:
+        """Return True if the engine and model are loaded."""
         return self._engine is not None and self._engine.model is not None

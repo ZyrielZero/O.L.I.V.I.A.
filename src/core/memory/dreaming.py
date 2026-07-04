@@ -1,4 +1,5 @@
-"""Dreaming System for O.L.I.V.I.A.
+"""Dreaming system for O.L.I.V.I.A.
+
 Memory consolidation during idle/shutdown using LLM summarization and fact extraction.
 
 Performance Optimizations:
@@ -92,6 +93,7 @@ class DreamReport:
     forced_current_session: bool = False
 
     def to_string(self) -> str:
+        """Format the report as a human-readable text block."""
         mode = "FORCED (current session)" if self.forced_current_session else "NORMAL"
         return (
             f"=== DREAM REPORT ===\n"
@@ -153,6 +155,7 @@ class IdleDetector:
         self._cooldown = 60.0
 
     def get_idle_time(self) -> float:
+        """Return seconds since last user input (0.0 on failure)."""
         try:
 
             class LASTINPUTINFO(ctypes.Structure):
@@ -168,6 +171,7 @@ class IdleDetector:
             return 0.0
 
     def start(self):
+        """Start the background idle-monitoring thread."""
         if self._running:
             return
         self._running = True
@@ -176,6 +180,7 @@ class IdleDetector:
         log.info(f"Idle detector started (threshold: {self.threshold}s)")
 
     def stop(self):
+        """Stop the idle-monitoring thread."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=2.0)
@@ -225,10 +230,12 @@ class DreamingEngine:
         log.info(f"   Summary model: {self.config.summary_model}")
 
     def start_idle_monitoring(self):
+        """Start idle detection if enabled in config."""
         if self.idle_detector:
             self.idle_detector.start()
 
     def stop_idle_monitoring(self):
+        """Stop idle detection if it was started."""
         if self.idle_detector:
             self.idle_detector.stop()
 
@@ -236,6 +243,7 @@ class DreamingEngine:
         self.dream_async()
 
     def dream_async(self) -> threading.Thread:
+        """Run a dream cycle in a background daemon thread."""
         thread = threading.Thread(target=self.dream, daemon=True)
         thread.start()
         return thread
@@ -243,6 +251,16 @@ class DreamingEngine:
     def dream(
         self, age_threshold_hours: Optional[int] = None, force_current_session: bool = False
     ) -> DreamReport:
+        """Run one memory consolidation cycle.
+
+        Args:
+            age_threshold_hours: Only process conversations older than this
+                (defaults to config; 0 processes everything).
+            force_current_session: Include the current session's conversations.
+
+        Returns:
+            DreamReport with counts, errors, and duration.
+        """
         with self._dream_lock:
             if self._is_dreaming:
                 log.warning("Already dreaming, skipping...")
@@ -586,6 +604,7 @@ class DreamingEngine:
             log.error(f"Failed to save dream report: {e}")
 
     def dream_on_shutdown(self):
+        """Dream over everything, including the current session, if enabled."""
         if not self.config.dream_on_shutdown:
             return
         log.info("Shutdown dreaming (including current session)...")

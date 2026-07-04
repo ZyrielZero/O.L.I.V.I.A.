@@ -38,9 +38,11 @@ class StateManager:
         self._listeners: List[Callable[[AppState], None]] = []
 
     def subscribe(self, cb: Callable[[AppState], None]):
+        """Register a listener for state changes."""
         self._listeners.append(cb)
 
     def unsubscribe(self, cb: Callable[[AppState], None]):
+        """Remove a previously registered listener."""
         if cb in self._listeners:
             self._listeners.remove(cb)
 
@@ -59,12 +61,15 @@ class StateManager:
                 print(f"State listener error: {e}")
 
     def get(self, key: str) -> Any:
+        """Get a state attribute, or None if it doesn't exist."""
         return getattr(self.state, key, None)
 
     def add_message(self, role: str, content: str):
+        """Append a chat message and notify."""
         self.state.messages.append({"role": role, "content": content})
         self._notify()
 
     def clear_messages(self):
+        """Clear all chat messages and notify."""
         self.state.messages.clear()
         self._notify()

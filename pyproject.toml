@@ -95,7 +95,7 @@ packages = ["src"]
 
 [tool.coverage.report]
 # Ratchet: raise as coverage grows; never lower. Applies whenever --cov runs (CI).
-fail_under = 30
+fail_under = 40
 
 [tool.ruff]
 line-length = 100
@@ -109,8 +109,6 @@ ignore = [
     "E501",   # line length is advisory; formatter handles it
     "D105",   # missing docstring in magic method — low value
     "D107",   # missing docstring in __init__ — class docstring covers it
-    "D102",   # TODO(phase-0): backfill method docstrings as files are touched, then re-enable
-    "D205",   # TODO(phase-0): reflow summary lines as files are touched, then re-enable
 ]
 
 [tool.ruff.lint.pydocstyle]

@@ -62,6 +62,7 @@ class SentenceBufferConfig:
 
 class SentenceBuffer:
     """Buffers tokens, yields complete sentences.
+
     Handles abbreviations, ellipsis, URLs, decimals.
     """
 
@@ -183,9 +184,11 @@ class SentenceBuffer:
         return None
 
     def clear(self) -> None:
+        """Discard the buffer and reset terminator state."""
         self._buf = ""
         self._has_terminator = False
 
     @property
     def pending(self) -> str:
+        """Unflushed buffer contents."""
         return self._buf

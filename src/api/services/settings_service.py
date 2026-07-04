@@ -56,6 +56,7 @@ class SettingsService:
         return RuntimeSettings()
 
     def get(self) -> RuntimeSettings:
+        """Return a copy of the current settings."""
         with self._lock:
             return self._settings.model_copy()
 
