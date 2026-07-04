@@ -95,7 +95,7 @@ packages = ["src"]
 
 [tool.coverage.report]
 # Ratchet: raise as coverage grows; never lower. Applies whenever --cov runs (CI).
-fail_under = 30
+fail_under = 95
 
 [tool.ruff]
 line-length = 100
