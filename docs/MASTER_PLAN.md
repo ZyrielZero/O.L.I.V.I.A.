@@ -179,8 +179,6 @@ references three removed files). Suite + ruff green after every group.
 > This spec IS the training target. Every SFT example, DPO pair, and eval gate derives
 > from it. Full spec lives in the private persona config (`config/character.yaml`, not
 > committed); this section is the operational summary the pipeline builds against.
-> NOTE before public flip: this section references the character identity — keep the
-> public copy generic ("see private persona spec") if that matters at flip time.
 
 **Voice pillars (SFT chosen-response style):**
 - Warm but direct; caring without performing it; quiet confidence
@@ -225,7 +223,7 @@ references three removed files). Suite + ruff green after every group.
 ### 4.1 Dataset generation
 
 - Teacher: Qwen3-32B (Apache 2.0 — clean for distillation; never proprietary-API outputs)
-- 500–2,000 on-voice SFT examples via style-transfer into Seele's register; quality over
+- 500–2,000 on-voice SFT examples via style-transfer into Olivia's register; quality over
   quantity (overfitting documented past ~4–5k in this regime)
 - Interleave 15–20% rehearsal data: JSON-schema tool-call turns (mirror the Neuro SDK
   format) + long-context memory-injection turns — rehearsed capabilities don't get forgotten
