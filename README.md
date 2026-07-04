@@ -49,7 +49,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full picture and
 
 - Windows 11 + NVIDIA GPU (developed on an RTX 4080 SUPER; CUDA 12.8 wheels —
   the pinned stack also covers RTX 50xx/Blackwell)
-- Python 3.11
+- Python 3.10+ (developed on 3.11)
 - [Ollama](https://ollama.com/) installed and running
 
 ## Quickstart
