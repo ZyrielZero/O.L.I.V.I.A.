@@ -56,12 +56,12 @@ models:
   # =========================================================================
   # THE EDGE - Reduced positivity bias, vivid non-slop prose
   # Flavor donor, not a pillar: "a bit unhinged" is a 0.2 statement.
-  # Verify this repo id resolves on HF before the first download — DavidAU
-  # ships many Dark Planet variants and it MUST be the L3.1 one (never mix
-  # L3 / L3.1 / L3.2 lineages). Alternates: DarkIdol 1.2, Dolphin 3.0.
+  # Repo id verified on HF 2026-07-03. Do NOT "simplify" it: the similarly
+  # named DavidAU/L3-Dark-Planet-8B exists but is Llama-3 lineage (never mix
+  # L3 / L3.1 / L3.2). Alternates: DarkIdol 1.2, Dolphin 3.0.
   # NO abliterated donors — documented instability, merges amplify it.
   # =========================================================================
-  - model: DavidAU/L3.1-Dark-Planet-8B
+  - model: DavidAU/Llama-3.1-128k-Dark-Planet-Uncensored-8B
     parameters:
       weight: 0.2
       density: 0.85
